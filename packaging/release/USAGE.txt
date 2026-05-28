@@ -1,0 +1,19 @@
+FT数据清洗工具 - 使用说明
+
+运行方式：
+1. 确保系统已安装Python 3.9或更高版本
+2. 安装依赖：python -m pip install -r requirements.txt
+3. 运行程序：python ft_data_cleaner.pyz
+
+程序功能：
+- DC数据清洗：处理DC测试数据
+- DVDS数据清洗：处理DVDS测试数据  
+- RG数据清洗：处理RG测试数据
+
+注意事项：
+- 请确保输入数据格式正确
+- 输出文件将保存在指定的输出目录
+- 如遇问题请查看程序日志信息
+
+版本：1.2
+作者：cc
