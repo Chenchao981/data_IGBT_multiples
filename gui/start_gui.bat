@@ -1,12 +1,16 @@
 @echo off
-cd /d "%~dp0"
-echo 启动FT数据清洗工具...
-python ft_data_cleaner_gui.py
+cd /d "%~dp0.."
+echo ========================================
+echo   FT 数据清洗工具 - 多封装厂
+echo ========================================
+echo.
+echo 支持的封装厂: 日月新(ASE) / 杰群(Jiequn)
+echo.
+python -m gui.main_window
 if %errorlevel% neq 0 (
     echo.
-    echo 程序运行出错，请检查：
-    echo 1. 是否已安装Python
-    echo 2. 是否已安装依赖包：pip install -r ../requirements.txt
-    echo 3. 检查错误日志信息
+    echo 启动失败，请检查:
+    echo 1. Python 是否已安装
+    echo 2. 依赖: pip install -r requirements.txt
     pause
-) 
+)
