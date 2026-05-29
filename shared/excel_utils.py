@@ -89,8 +89,15 @@ class ExcelOptimizer:
                 self.logger.warning(f"calamine引擎失败，回退到openpyxl: {str(e)}")
                 kwargs['engine'] = 'openpyxl'
                 return self.read_excel_fast(file_path, **kwargs)
-            else:
-                raise e
+            # 如果openpyxl也失败，尝试xlrd（老格式 .xls）
+            if kwargs.get('engine') == 'openpyxl':
+                self.logger.warning(f"openpyxl引擎失败，尝试xlrd（老格式 .xls）: {str(e)}")
+                kwargs['engine'] = 'xlrd'
+                return self.read_excel_fast(file_path, **kwargs)
+            # xlrd也失败，尝试用 calamine 且不传 engine 试试
+            self.logger.warning(f"xlrd引擎也失败，尝试用pandas自动选择: {str(e)}")
+            kwargs.pop('engine', None)
+            return pd.read_excel(file_path, **kwargs)
     
     def write_excel_fast(self, df: pd.DataFrame, file_path: Union[str, Path], 
                         **kwargs) -> bool:
@@ -278,6 +285,41 @@ def generate_output_filename(prefix: str, extension: str = ".xlsx") -> str:
     """生成输出文件名的便捷函数"""
     optimizer = get_excel_optimizer()
     return optimizer.generate_output_filename(prefix, extension)
+
+
+def scan_csv_files(directory: Union[str, Path]) -> List[Path]:
+    """扫描目录下的CSV文件（排除临时文件）"""
+    directory = Path(directory)
+    if not directory.exists():
+        return []
+    return sorted([
+        f for f in directory.glob("*.csv") if not f.name.startswith("~$")
+    ])
+
+
+def scan_all_files(directory: Union[str, Path], extensions: List[str] = None) -> List[Path]:
+    """
+    扫描目录下指定扩展名的所有文件
+    
+    Args:
+        directory: 目录路径
+        extensions: 扩展名列表，如 ['.xlsx', '.xls', '.csv']，默认全部
+        
+    Returns:
+        List[Path]: 文件路径列表
+    """
+    directory = Path(directory)
+    if not directory.exists():
+        return []
+    if extensions is None:
+        extensions = ['.xlsx', '.xls', '.csv']
+    files = []
+    for ext in extensions:
+        pattern = f"*{ext}" if not ext.startswith('.') else f"*{ext}"
+        for f in directory.glob(pattern):
+            if not f.name.startswith("~$") and f.is_file():
+                files.append(f)
+    return sorted(files)
 
 
 def generate_lot_based_filename(lot_ids: list, data_type: str, extension: str = ".xlsx") -> str:

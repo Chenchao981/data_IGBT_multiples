@@ -12,7 +12,7 @@ import logging
 import sys
 
 # 添加项目根目录到路径
-project_root = Path(__file__).parent.parent
+project_root = Path(__file__).parent.parent.parent
 sys.path.append(str(project_root))
 
 from shared.excel_utils import generate_lot_based_filename, read_excel_fast, write_excel_fast

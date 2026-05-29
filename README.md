@@ -1,178 +1,136 @@
-# FT数据清洗工具集
+# FT数据清洗工具集 — 多封装厂模块化架构
 
 ## 项目概述
 
-FT数据清洗工具集是一个专业的半导体测试数据处理工具，用于清洗和标准化ASE测试数据。支持DC、DVDS、RG三种数据类型的处理，提供命令行和图形界面两种使用方式。
+FT数据清洗工具集是一个专业的半导体测试数据处理工具，支持多个封装厂的测试数据清洗和标准化。目前已支持的封装厂：
+
+| 封装厂 | 数据类型 | 数据格式 | 状态 |
+|--------|----------|----------|------|
+| **日月新 (ASE)** | DC / DVDS / RG | .xlsx | ✅ 稳定 |
+| **杰群 (Jiequn)** | DC / DVDS / RG | .csv (DTA) | ✅ 可用 |
+| 杰群 PAT | PAT 统计 | .csv | 🔜 待开发 |
 
 ## 📁 项目结构
 
 ```
-data_IGBT/
-├── ASEData/                    # 原始测试数据
-│   ├── DC/                     # DC测试数据
-│   ├── DVDS/                   # DVDS测试数据
-│   └── RG/                     # RG测试数据
-├── dc_processing/              # DC数据清洗模块
-│   ├── dc_cleaner.py          # DC清洗器主程序
-│   ├── dc_core_logic.md       # DC处理逻辑文档
-│   └── README.md              # DC模块说明
-├── dvds_processing/            # DVDS数据清洗模块
-│   ├── dvds_cleaner.py        # DVDS清洗器主程序
-│   ├── dvds_core_logic.md     # DVDS处理逻辑文档
-│   └── README.md              # DVDS模块说明
-├── rg_processing/              # RG数据清洗模块
-│   ├── rg_cleaner.py          # RG清洗器主程序
-│   └── TODO_RG.md             # RG模块待办事项
-├── gui/                        # 图形界面模块
-│   ├── ft_data_cleaner_gui.py # GUI主程序
-│   ├── start_gui.bat          # Windows启动脚本
-│   └── README.md              # GUI模块说明
-├── output/                     # 清洗后数据输出目录
-├── excel_utils.py             # Excel处理工具函数
-├── requirements.txt           # Python依赖包
-└── README.md                  # 本文档
+data_IGBT_multiple/
+│
+├── factories/                          ← 封装厂模块（各厂独立）
+│   ├── base/
+│   │   └── base_cleaner.py             ← 抽象基类
+│   ├── riyuexin/                       ← 日月新（ASE）
+│   │   ├── config.py                   ← 厂配置（数据类型、单位换算等）
+│   │   ├── dc_cleaner.py
+│   │   ├── dvds_cleaner.py
+│   │   └── rg_cleaner.py
+│   └── jiequn/                         ← 杰群（Jiequn）
+│       ├── config.py                   ← 厂配置 + 单位换算规则
+│       ├── csv_parser.py               ← DTA CSV 通用解析器
+│       ├── dc_cleaner.py               ← 含 IDSS/IGSS/ISGS→nA, Rdson→mR
+│       ├── dvds_cleaner.py             ← 含 DVDS V→mV
+│       └── rg_cleaner.py
+│
+├── shared/
+│   └── excel_utils.py                  ← 共享 Excel 工具（支持 .xls/.xlsx）
+│
+├── data/                               ← 原始测试数据
+│   └── 杰群/                           ← 杰群 CSV 数据源
+│
+├── output/                             ← 清洗后输出
+│   └── 杰群-output/                    ← 杰群输出目录
+│
+├── gui/                                ← 图形界面（待重构为多厂侧边栏）
+│   ├── ft_data_cleaner_gui.py
+│   └── start_gui.bat
+│
+├── dc_processing/                      ← [旧] 日月新 DC（保持兼容，GUI 仍依赖）
+├── dvds_processing/                    ← [旧] 日月新 DVDS
+├── rg_processing/                      ← [旧] 日月新 RG
+│
+├── requirements.txt
+└── README.md
 ```
 
 ## 🚀 快速开始
 
 ### 安装依赖
 ```bash
-python -m pip install -r requirements.txt
+pip install -r requirements.txt
 ```
 
-### 使用方式
+### 命令行使用
 
-#### 1. 图形界面（推荐）
-
+#### 日月新（ASE）
 ```bash
-# 方式1：使用启动脚本（Windows）
-cd gui
-start_gui.bat
+# 新模块路径（推荐）
+python factories/riyuexin/dc_cleaner.py
+python factories/riyuexin/dvds_cleaner.py
+python factories/riyuexin/rg_cleaner.py
+```
 
-# 方式2：直接运行Python
+#### 杰群（Jiequn）
+```bash
+python factories/jiequn/dc_cleaner.py       # DC 清洗 + 单位换算
+python factories/jiequn/dvds_cleaner.py     # DVDS 清洗 + V→mV
+python factories/jiequn/rg_cleaner.py       # RG 清洗
+```
+
+### 图形界面
+```bash
 cd gui
 python ft_data_cleaner_gui.py
-
-# 方式3：从项目根目录
-python gui/ft_data_cleaner_gui.py
 ```
+> 注意：GUI 当前仅支持日月新。多厂 UI（侧边栏选厂）将在代码验证通过后重构。
 
-#### 2. 命令行方式
-```bash
-# DC数据清洗
-cd dc_processing
-python dc_cleaner.py
+## 🏭 封装厂架构
 
-# DVDS数据清洗
-cd dvds_processing
-python dvds_cleaner.py
+### 添加新封装厂只需 3 步：
 
-# RG数据清洗
-cd rg_processing
-python rg_cleaner.py
-```
+1. **创建目录** `factories/<厂名>/`
+2. **编写 `config.py`**：声明厂名、数据类型、文件格式、单位换算规则
+3. **编写 Cleaner**：继承 `BaseCleaner`，实现 `process_all()`
 
-## 📊 数据处理流程
+每个厂有独立的：
+- 数据解析逻辑（Excel vs CSV vs 其他）
+- 参数提取规则
+- 单位换算方法（`config.py` 中的 `UNIT_CONVERSIONS`）
 
-### 输入数据
-- **格式**：Excel (.xlsx) 文件
-- **位置**：ASEData/{类型}/ 目录
-- **来源**：ASE测试设备导出的原始数据
+## 📊 单位换算（杰群）
 
-### 处理过程
-1. **文件扫描**：自动扫描指定目录下的Excel文件
-2. **数据提取**：根据各类型的数据结构提取有效测试数据
-3. **数据清洗**：去除无效数据、标准化格式
-4. **数据合并**：将多个文件的数据合并为统一格式
-5. **结果输出**：生成带时间戳的Excel文件
+| 参数 | 原始单位 | 目标单位 | 换算因子 |
+|------|----------|----------|----------|
+| IDSS | A | nA | ×10⁹ |
+| IGSS | A | nA | ×10⁹ |
+| ISGS | A | nA | ×10⁹ |
+| Rdson | Ω | mR | ×10³ |
+| DVDS | V | mV | ×10³ |
 
-### 输出数据
-- **格式**：标准化的Excel文件
-- **命名**：{lot_ID}_{类型}_{时间戳}.xlsx（多批次时为mixed_{类型}_{时间戳}.xlsx）
-- **位置**：用户指定的输出目录
-- **内容**：包含NUM、lot_ID和相应参数列
-
-## 🛠️ 各模块功能
-
-### DC数据清洗 (`dc_processing/`)
-- **功能**：处理DC参数测试数据
-- **支持参数**：IDSS、VTH、BVDSS、RDS(ON)、LRDON等
-- **特性**：智能参数识别、重复参数处理、测试条件增强
-
-### DVDS数据清洗 (`dvds_processing/`)
-- **功能**：处理DVDS参数测试数据
-- **输出格式**：NUM, lot_ID, DVDS(mV)
-- **特性**：自动单位识别、数据验证
-
-### RG数据清洗 (`rg_processing/`)
-- **功能**：处理RG参数测试数据
-- **输出格式**：NUM, lot_ID, RG(R)
-- **特性**：动态位置定位、异常值过滤
-
-### GUI界面 (`gui/`)
-- **功能**：提供统一的图形用户界面
-- **特性**：多线程处理、实时状态显示、桌面路径默认设置
-- **支持**：所有三种数据类型的清洗
-- **文件命名**：基于lot_ID的智能命名
+日月新无需单位换算（数据已是目标单位）。
 
 ## 📋 系统要求
 
 - **操作系统**：Windows 10/11
 - **Python版本**：3.7+
-- **内存**：建议4GB以上
-- **存储**：取决于数据文件大小
+- **内存**：建议 8GB 以上（杰群 CSV 单文件可达 70MB）
 
 ## 📦 依赖包
 
-| 包名 | 版本 | 用途 |
-|------|------|------|
-| pandas | ≥1.5.0 | 数据处理 |
-| openpyxl | ≥3.0.0 | Excel读写 |
-| PyQt5 | ≥5.15.0 | GUI界面 |
-| python-calamine | ≥0.2.0 | 快速Excel读取 |
-| xlsxwriter | ≥3.0.0 | Excel写入优化 |
-
-## 🐛 常见问题
-
-### 1. 模块导入错误
-**解决**：确保在正确的目录下运行程序，或检查Python路径设置
-
-### 2. 文件读取失败
-**解决**：检查Excel文件是否被其他程序占用，确保文件格式正确
-
-### 3. GUI启动失败
-**解决**：确保已安装PyQt5，检查系统是否支持GUI显示
-
-### 4. 内存不足
-**解决**：处理大文件时关闭其他应用程序，或分批处理数据
-
-## 📈 性能优化
-
-- 使用calamine引擎快速读取Excel文件
-- 向量化数据处理提升pandas性能
-- 多线程GUI防止界面卡顿
-- 智能内存管理处理大数据集
+| 包名 | 用途 |
+|------|------|
+| pandas ≥2.2.0 | 数据处理 |
+| openpyxl | .xlsx 读写 |
+| xlrd | .xls 老格式支持 |
+| python-calamine | 快速 Excel 读取 |
+| xlsxwriter | 快速 Excel 写入 |
+| PyQt5 | GUI 界面 |
 
 ## 🔄 版本历史
 
-- **v1.2** (2025-01-20)：GUI界面优化，移除图表功能，基于lot_ID的文件命名
-- **v1.1** (2025-01-20)：添加GUI界面，优化用户体验
-- **v1.0** (2025-01-20)：基础功能实现，支持三种数据类型
-
-## 🤝 贡献
-
-1. Fork 项目
-2. 创建功能分支
-3. 提交更改
-4. 推送到分支
-5. 创建Pull Request
-
-## 📄 许可证
-
-本项目采用MIT许可证 - 查看LICENSE文件了解详情
+- **v2.0** (2025-05-29)：多封装厂模块化重构，新增杰群支持
+- **v1.2** (2025-01-20)：GUI 优化，lot_ID 文件命名
+- **v1.0** (2025-01-20)：初始版本，支持日月新 DC/DVDS/RG
 
 ---
 
 **开发者**: cc  
-**创建时间**: 2025-06-18  
-**最后更新**: 2025-01-20 
+**最后更新**: 2025-05-29

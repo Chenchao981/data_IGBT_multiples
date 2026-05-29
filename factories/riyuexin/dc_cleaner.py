@@ -20,7 +20,7 @@ import re
 import sys
 
 # 将项目根目录添加到Python路径，以便导入shared
-project_root = Path(__file__).resolve().parent.parent
+project_root = Path(__file__).resolve().parent.parent.parent
 sys.path.append(str(project_root))
 
 from shared.excel_utils import (
