@@ -136,6 +136,11 @@ data/杰群2/RAW/
 
 命令行：`python factories/jiequn/clean_unified.py data/杰群2/RAW output/杰群2`
 
+格式2输出规则：
+- 按源 CSV `Item` 行从左到右的顺序输出参数，方便和源数据逐列对比。
+- 剔除 `CONT*` 计数字段（如 `CONT_TR`、`CONT_RF`、`CONT-B`、`CONT-C`、`CONT-E`）和 `SAME` 占位字段。
+- 多个同名参数按出现顺序编号，例如 `VTH_EX`、`VTH`、`VTH` 会输出为 `VTH1(V)`、`VTH2(V)`、`VTH3(V)`。
+
 ---
 
 ## 🏷️ 输出格式规范
@@ -172,13 +177,15 @@ data/杰群2/RAW/
 
 ### 参数排序规则
 
-杰群输出会通过 `factories/jiequn/formatting.py` 统一排序，格式1和格式2共用同一套规则：
+杰群格式1会通过 `factories/jiequn/formatting.py` 统一排序：
 
 ```text
 NUM, 批次, VTH*, BVDSS*, IDSS*, ISGS*/IGSS*, RDON*, LRDON*, VF*, VFSD*, VFSDS*, DVDS*, RG*, CONT*, ABSDEL*, DELAY*
 ```
 
 其中 `ISGS` 和 `IGSS` 按同一偏置值成组排列，方便和日月新/旧版输出对照。
+
+杰群格式2（统一CSV）不做上述重排，按源 CSV `Item` 行从左到右保留参数顺序，只把内部 `周记` 列改名为 `批次`。
 
 ---
 
@@ -659,9 +666,10 @@ Sigma, LCL\n计算值, UCL\n计算值, LCL\n更新前, UCL\n更新前, LCL\n更�
 - 负偏置 `ISGS`（如 `-25`、`-20`、`-10`）会归一为 `IGSS25/20/10`，去掉负号后再输出。
 
 ### 1.1 杰群输出格式化
-- `factories/jiequn/formatting.py` 是杰群格式1和格式2共用的输出格式入口。
+- `factories/jiequn/formatting.py` 是杰群格式1的输出格式入口。
 - `normalize_output_columns()` 会把内部 `周记` 列重命名为对外输出的 `批次`，并统一参数顺序。
 - 如果后续新增参数，优先在 `PARAM_ORDER` 里补排序位置；不要在各 cleaner 里各自手写列顺序。
+- 杰群格式2统一 CSV 使用 `preserve_source_order=True`，并在 `clean_unified._normalize_unified_columns()` 中只做 `周记` → `批次`，不重排参数列。
 
 ### 2. 子目录发现（杰群批次1）
 - `Jiequn*Cleaner._get_*_subdir()` 使用 `Path(self.input_dir).rglob(sub)` 递归找类型目录（如 `DC`），返回首个含 CSV 的目录。fallback `<input_dir>/<sub>`。

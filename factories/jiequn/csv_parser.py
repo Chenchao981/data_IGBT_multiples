@@ -174,13 +174,15 @@ def _item_matches_param(item_name: str, target_param: str) -> bool:
         "RDSON": {"RDON", "RDSON"},
         "RDON": {"RDON", "RDSON"},
         "LCRRG": {"LCRRG"},
-        "VF": {"VF"},
         "VFSD": {"VFSD"},
         "VFSDS": {"VFSDS"},
     }
     allowed = aliases.get(norm_target)
     if allowed is not None:
         return norm_item in allowed
+
+    if norm_target == "VF":
+        return norm_item == "VF" or item.startswith("VF_") or item.startswith("VF-")
 
     if norm_item == norm_target:
         return True
@@ -267,7 +269,8 @@ def extract_lot_id_jiequn(filename: str) -> str:
 
 def parse_dta_csv(file_path: str, target_params: List[str],
                   max_scan: int = 40,
-                  unique_only: bool = False) -> Optional[pd.DataFrame]:
+                  unique_only: bool = False,
+                  preserve_source_order: bool = False) -> Optional[pd.DataFrame]:
     """
     解析杰群 DTA CSV，提取目标参数并用增强名称（含测试条件+单位）。
 
@@ -275,6 +278,7 @@ def parse_dta_csv(file_path: str, target_params: List[str],
         file_path: CSV 路径
         target_params: 目标参数名列表，如 ["DVDS"] 匹配 Item 中的 DVDS_EX
         max_scan: 头部扫描行数
+        preserve_source_order: True 时按 Item 行从左到右匹配，适用于统一 CSV 对照源数据
 
     Returns:
         DataFrame，含 周记 + 增强参数列，失败返回 None
@@ -295,17 +299,31 @@ def parse_dta_csv(file_path: str, target_params: List[str],
 
     # 找到所有匹配列
     col_matches = []  # [(csv_field_idx, param_base)]
-    for bp in target_params:
-        found = False
+    if preserve_source_order:
+        seen_params = set()
         for i, name in enumerate(item_names):
-            if name and _item_matches_param(name, bp):
-                csv_field_idx = i + 1
-                col_matches.append((csv_field_idx, bp))
-                if unique_only:
-                    found = True
-                    break  # 只取第一个匹配
-        if unique_only and found:
-            continue
+            if not name:
+                continue
+            for bp in target_params:
+                if unique_only and bp in seen_params:
+                    continue
+                if _item_matches_param(name, bp):
+                    csv_field_idx = i + 1
+                    col_matches.append((csv_field_idx, bp))
+                    seen_params.add(bp)
+                    break
+    else:
+        for bp in target_params:
+            found = False
+            for i, name in enumerate(item_names):
+                if name and _item_matches_param(name, bp):
+                    csv_field_idx = i + 1
+                    col_matches.append((csv_field_idx, bp))
+                    if unique_only:
+                        found = True
+                        break  # 只取第一个匹配
+            if unique_only and found:
+                continue
 
     if not col_matches:
         print(f"  [WARN] {fname}: 未找到目标参数 {target_params}")

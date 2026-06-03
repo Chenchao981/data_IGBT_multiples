@@ -8,7 +8,7 @@ import sys
 sys.path.insert(0, '.')
 from pathlib import Path
 from factories.jiequn.csv_parser import parse_dta_csv
-from factories.jiequn.formatting import BATCH_COL, normalize_output_columns
+from factories.jiequn.formatting import BATCH_COL, LEGACY_BATCH_COL
 from shared.excel_utils import write_excel_fast, generate_lot_based_filename
 import pandas as pd
 
@@ -23,7 +23,7 @@ def apply_conv(df):
     return df
 
 TYPES = [
-    ("DC",   ["VTH","BVDSS","IDSS","ISGS","RDON","LRDON","VF","VFSD","VFSDS","CONT","ABSDEL","DELAY"], False),
+    ("DC",   ["VTH","BVDSS","IDSS","ISGS","RDON","LRDON","VF","VFSD","VFSDS","ABSDEL","DELAY"], False),
     ("DVDS", ["DVDS"], True),
     ("RG",   ["LCR-RG"], True),
 ]
@@ -35,7 +35,15 @@ def run(input_dir, output_dir):
     print(f"文件: {len(files)}")
     success = False
     for label, params, unique in TYPES:
-        dfs = [parse_dta_csv(str(f), params, unique_only=unique) for f in files]
+        dfs = [
+            parse_dta_csv(
+                str(f),
+                params,
+                unique_only=unique,
+                preserve_source_order=True,
+            )
+            for f in files
+        ]
         dfs = [d for d in dfs if d is not None and not d.empty]
         if not dfs: print(f"{label}: 无数据"); continue
         merged = pd.concat(dfs, ignore_index=True, sort=False)
@@ -43,12 +51,20 @@ def run(input_dir, output_dir):
         merged.dropna(subset=["周记"], inplace=True)
         merged.reset_index(drop=True, inplace=True)
         merged.insert(0, "NUM", range(1, len(merged)+1))
-        merged = normalize_output_columns(merged, label)
+        merged = _normalize_unified_columns(merged)
         fname = generate_lot_based_filename(merged[BATCH_COL].tolist(), f"{label}_JQ2")
         write_excel_fast(merged, out / fname, sheet_name=f"{label}_Data")
         print(f"{label}: {len(merged):,} 行 -> {fname}")
         success = True
     return success
+
+
+def _normalize_unified_columns(df: pd.DataFrame) -> pd.DataFrame:
+    """Keep Jiequn2 parameter columns in source CSV order and expose 批次."""
+    df = df.rename(columns={LEGACY_BATCH_COL: BATCH_COL})
+    front = [c for c in ("NUM", BATCH_COL) if c in df.columns]
+    rest = [c for c in df.columns if c not in front]
+    return df[front + rest]
 
 if __name__ == "__main__":
     import sys as _s
