@@ -33,6 +33,7 @@ def run(input_dir, output_dir):
     out.mkdir(parents=True, exist_ok=True)
     files = sorted(inp.glob("*DTA.CSV"))
     print(f"文件: {len(files)}")
+    success = False
     for label, params, unique in TYPES:
         dfs = [parse_dta_csv(str(f), params, unique_only=unique) for f in files]
         dfs = [d for d in dfs if d is not None and not d.empty]
@@ -46,6 +47,8 @@ def run(input_dir, output_dir):
         fname = generate_lot_based_filename(merged[BATCH_COL].tolist(), f"{label}_JQ2")
         write_excel_fast(merged, out / fname, sheet_name=f"{label}_Data")
         print(f"{label}: {len(merged):,} 行 -> {fname}")
+        success = True
+    return success
 
 if __name__ == "__main__":
     import sys as _s

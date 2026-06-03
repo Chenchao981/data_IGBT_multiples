@@ -12,7 +12,8 @@ import os
 from datetime import datetime
 from PyQt5.QtWidgets import (QWidget, QVBoxLayout, QHBoxLayout, QLabel,
                              QLineEdit, QPushButton, QTextEdit, QGroupBox,
-                             QFileDialog, QMessageBox, QProgressBar)
+                             QFileDialog, QMessageBox, QProgressBar,
+                             QButtonGroup)
 from PyQt5.QtCore import Qt, QThread, pyqtSignal
 from PyQt5.QtGui import QFont
 
@@ -63,6 +64,7 @@ class BasePanel(QWidget):
         self.worker: CleanerWorker = None
         self._selected_type: str = ""
         self._type_buttons: dict = {}
+        self._type_button_group: QButtonGroup = None
         self.init_ui()
 
     def init_ui(self):
@@ -83,6 +85,8 @@ class BasePanel(QWidget):
         group = QGroupBox(f"{self.factory_name} - 数据类型选择")
         group.setStyleSheet(self._group_style())
         hbox = QHBoxLayout(group)
+        self._type_button_group = QButtonGroup(group)
+        self._type_button_group.setExclusive(True)
 
         for i, dt in enumerate(self.data_types):
             btn = QPushButton(dt)
@@ -90,6 +94,7 @@ class BasePanel(QWidget):
             btn.setMinimumHeight(45)
             btn.setMinimumWidth(100)
             btn.clicked.connect(lambda checked, t=dt: self._on_type_selected(t))
+            self._type_button_group.addButton(btn)
             self._type_buttons[dt] = btn
             hbox.addWidget(btn)
             if i == 0:
