@@ -47,7 +47,8 @@ class BasePanel(QWidget):
 
     子类需设置：
         - factory_name: 工厂名称
-        - data_types: 数据类型列表，如 ["DC", "DVDS", "RG", "PAT"]
+        - data_types: 数据文件格式/清洗入口列表，如 ["DC", "DVDS", "RG"]
+        - post_process_types: 清洗后处理列表，如 ["PAT"]
         - default_input: 默认输入路径
         - default_output: 默认输出路径
     并实现：
@@ -56,6 +57,7 @@ class BasePanel(QWidget):
 
     factory_name: str = ""
     data_types: list = []
+    post_process_types: list = []
     default_input: str = ""
     default_output: str = ""
 
@@ -72,7 +74,7 @@ class BasePanel(QWidget):
         layout.setSpacing(15)
         layout.setContentsMargins(20, 20, 20, 20)
 
-        # 数据类型按钮组
+        # 数据格式/处理类型按钮组
         layout.addWidget(self._build_type_group())
         # 文件夹选择
         layout.addWidget(self._build_folder_group())
@@ -82,13 +84,25 @@ class BasePanel(QWidget):
         layout.addWidget(self._build_status_group())
 
     def _build_type_group(self) -> QGroupBox:
-        group = QGroupBox(f"{self.factory_name} - 数据类型选择")
+        group = QGroupBox(f"{self.factory_name} - 处理类型选择")
         group.setStyleSheet(self._group_style())
-        hbox = QHBoxLayout(group)
+        vbox = QVBoxLayout(group)
         self._type_button_group = QButtonGroup(group)
         self._type_button_group.setExclusive(True)
 
-        for i, dt in enumerate(self.data_types):
+        vbox.addLayout(self._build_type_row("数据文件格式:", self.data_types, select_first=True))
+        if self.post_process_types:
+            vbox.addLayout(self._build_type_row("清洗后统计/分析:", self.post_process_types))
+
+        return group
+
+    def _build_type_row(self, label: str, types: list, select_first: bool = False) -> QHBoxLayout:
+        hbox = QHBoxLayout()
+        row_label = QLabel(label)
+        row_label.setMinimumWidth(140)
+        hbox.addWidget(row_label)
+
+        for i, dt in enumerate(types):
             btn = QPushButton(dt)
             btn.setCheckable(True)
             btn.setMinimumHeight(45)
@@ -97,12 +111,12 @@ class BasePanel(QWidget):
             self._type_button_group.addButton(btn)
             self._type_buttons[dt] = btn
             hbox.addWidget(btn)
-            if i == 0:
+            if select_first and i == 0:
                 btn.setChecked(True)
                 self._selected_type = dt
 
         hbox.addStretch()
-        return group
+        return hbox
 
     def _build_folder_group(self) -> QGroupBox:
         group = QGroupBox("文件夹选择")

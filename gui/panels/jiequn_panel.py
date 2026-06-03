@@ -15,7 +15,9 @@ from factories.jiequn.config import FACTORY_NAME
 
 class JiequnPanel(BasePanel):
     factory_name = FACTORY_NAME
-    data_types = ["DC", "DVDS", "RG", "统一CSV", "PAT"]  # 格式1: 分文件 / 格式2: 单文件 / 统计
+    # 第一行：原始数据文件格式/清洗入口；第二行：清洗后统计分析。
+    data_types = ["DC", "DVDS", "RG", "统一CSV"]
+    post_process_types = ["PAT"]
     default_input = str(project_root / "data" / "杰群")
     default_output = str(project_root / "output" / "杰群-output")
     unified_input = str(project_root / "data" / "杰群2" / "RAW")

@@ -50,7 +50,7 @@ data_IGBT_multiple/
 │   └── panels/
 │       ├── base_panel.py           ← 面板基类（文件夹选 / 按钮 / 日志）
 │       ├── riyuexin_panel.py       ← 日月新: 3 按钮
-│       └── jiequn_panel.py         ← 杰群: 5 按钮
+│       └── jiequn_panel.py         ← 杰群: 4 个清洗入口 + 清洗后统计
 │
 ├── data/                           ← 原始数据
 │   ├── 杰群/                       ← 批次1: 分目录 (DC/DVDS/RG)
@@ -70,7 +70,9 @@ data_IGBT_multiple/
 python gui/main_window.py
 ```
 
-### 杰群面板 5 按钮说明
+### 杰群面板说明
+
+第一行是原始数据文件格式/清洗入口，每次只选择一种：
 
 | 按钮 | 处理的数据格式 | 输入目录示例 | 输出 |
 |------|---------------|-------------|------|
@@ -78,7 +80,12 @@ python gui/main_window.py
 | **DVDS** | 分目录（data/杰群/.../DVDS/） | 指向 `data/杰群` | NUM + 批次 + DVDS(mV) |
 | **RG** | 分目录（data/杰群/.../RG/） | 指向 `data/杰群` | NUM + 批次 + RG(R) |
 | **统一CSV** | 单个CSV含全部参数（data/杰群2/RAW/） | 指向 `data/杰群2/RAW` | DC.xlsx + DVDS.xlsx + RG.xlsx |
-| **PAT** | 从已清洗的 DC/DVDS/RG 统计 | 指向输出目录 | PAT.xlsx（统计汇总） |
+
+第二行是清洗后统计/分析方法：
+
+| 按钮 | 处理对象 | 输入目录示例 | 输出 |
+|------|---------|-------------|------|
+| **PAT** | 已清洗的 DC/DVDS/RG 输出 | 指向 `output/杰群-output` | PAT.xlsx（统计汇总） |
 
 ---
 
@@ -440,7 +447,7 @@ User clicks factory in QListWidget
 MainWindow._on_factory_changed → QStackedWidget 切换到对应面板
             │
             ▼
-User 选择数据类型 + 输入/输出文件夹 + 点击 "开始清洗"
+User 选择数据文件格式或清洗后统计方法 + 输入/输出文件夹 + 点击 "开始清洗"
             │
             ▼
 BasePanel._start:
@@ -465,7 +472,8 @@ Worker emits progress / finished / error
 | 元素 | 类型 | 说明 |
 |------|------|------|
 | `factory_name` | 类属性 | 厂名 |
-| `data_types` | 类属性 | 支持的数据类型列表 |
+| `data_types` | 类属性 | 原始数据文件格式/清洗入口列表 |
+| `post_process_types` | 类属性 | 清洗后处理/统计分析列表 |
 | `unit_conversions` | 类属性 | `{param: {from, to, factor}}` 单位换算表 |
 | `__init__(input_dir, output_dir)` | 构造 | 存储 Path，自动创建 output_dir |
 | `process_all(data_type)` | 抽象方法 | **子类必须实现** |
@@ -624,8 +632,9 @@ Sigma, LCL\n计算值, UCL\n计算值, LCL\n更新前, UCL\n更新前, LCL\n更�
 
 **`panels/base_panel.py`：** 通用 UI 外壳
 - `CleanerWorker(QThread)`：后台线程运行 cleaner，信号 `progress(str)`、`finished(label, success)`、`error(str)`。
-- `BasePanel(QWidget)`：构建数据类型按钮组 + 文件夹选择组 + 操作按钮 + 状态文本区。
-  - 数据类型按钮：checkable，首个自动选中。
+- `BasePanel(QWidget)`：构建处理类型按钮组 + 文件夹选择组 + 操作按钮 + 状态文本区。
+  - 按钮通过 `QButtonGroup(exclusive=True)` 保持单选。
+  - 第一行用于原始数据文件格式/清洗入口；可选第二行用于 PAT 等清洗后统计分析。
   - 抽象方法：`_get_cleaner_fn(data_type) -> Callable`，**子类必须实现**。
   - `_log(msg)`：时间戳 + 追加到状态区，自动滚动。
   - 样式：蓝色背景、加粗按钮、灰色边框。
@@ -633,10 +642,10 @@ Sigma, LCL\n计算值, UCL\n计算值, LCL\n更新前, UCL\n更新前, LCL\n更�
 **`panels/riyuexin_panel.py`：** 3 按钮（DC / DVDS / RG），默认路径 `~/Desktop`。
 - DVDS 通过 monkey-patch 调整 `c.dvds_dir` / `c.output_dir`（因为 `DVDSCleaner` 内部用 `base_dir` 派生路径）。
 
-**`panels/jiequn_panel.py`：** 5 按钮（DC / DVDS / RG / 统一CSV / PAT），默认路径 `data/杰群` / `output/杰群-output`。
+**`panels/jiequn_panel.py`：** 第一行 4 个清洗入口（DC / DVDS / RG / 统一CSV），第二行清洗后统计（PAT）。
 - "统一CSV" 调 `clean_unified.run(inp, out)`。
 - "PAT" 调 `save_pat(build_pat(out), out)`。
-- ⚠️ 面板不自动检测批次2，用户需手动指向 `data/杰群2/RAW` 并点 "统一CSV"。
+- 选择 "统一CSV" 时自动切到 `data/杰群2/RAW` / `output/杰群2`；选择 DC/DVDS/RG/PAT 时自动切回 `data/杰群` / `output/杰群-output`。
 
 ---
 
@@ -797,7 +806,7 @@ Sigma, LCL\n计算值, UCL\n计算值, LCL\n更新前, UCL\n更新前, LCL\n更�
 | `gui/main_window.py` | `MainWindow`, `FACTORIES` | 侧边栏 + 堆叠切换器 |
 | `gui/panels/base_panel.py` | `BasePanel`, `CleanerWorker` | UI 外壳 + QThread |
 | `gui/panels/riyuexin_panel.py` | `RiyuexinPanel` | 3 按钮（DC/DVDS/RG） |
-| `gui/panels/jiequn_panel.py` | `JiequnPanel` | 5 按钮（DC/DVDS/RG/统一CSV/PAT） |
+| `gui/panels/jiequn_panel.py` | `JiequnPanel` | 4 个清洗入口 + PAT 清洗后统计 |
 | `packaging/build_secure_pyz.py` | `create_secure_archive` | ⚠️ 配置陈旧，需更新 |
 
 ---
