@@ -49,6 +49,13 @@ def run(input_dir, output_dir):
         merged = pd.concat(dfs, ignore_index=True, sort=False)
         merged = apply_conv(merged)
         merged.dropna(subset=["周记"], inplace=True)
+        if label == "DVDS":
+            before = len(merged)
+            value_cols = [c for c in merged.columns if c != "周记"]
+            merged.dropna(subset=value_cols, how="all", inplace=True)
+            removed = before - len(merged)
+            if removed:
+                print(f"{label}: 已删除空值记录 {removed:,} 行")
         merged.reset_index(drop=True, inplace=True)
         merged.insert(0, "NUM", range(1, len(merged)+1))
         merged = _normalize_unified_columns(merged)

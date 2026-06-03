@@ -140,6 +140,7 @@ data/杰群2/RAW/
 - 按源 CSV `Item` 行从左到右的顺序输出参数，方便和源数据逐列对比。
 - 剔除 `CONT*` 计数字段（如 `CONT_TR`、`CONT_RF`、`CONT-B`、`CONT-C`、`CONT-E`）和 `SAME` 占位字段。
 - 多个同名参数按出现顺序编号，例如 `VTH_EX`、`VTH`、`VTH` 会输出为 `VTH1(V)`、`VTH2(V)`、`VTH3(V)`。
+- `DVDS(mV)` 为空的记录行会在输出前删除，空值不参与后续统计。
 
 ---
 
