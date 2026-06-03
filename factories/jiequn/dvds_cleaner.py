@@ -36,6 +36,8 @@ class JiequnDVDSCleaner(BaseCleaner):
     def _get_subdir(self) -> Path:
         sub = TYPE_SUBDIRS.get("DVDS", "DVDS")
         base = Path(self.input_dir)
+        if base.name.upper() == sub.upper() and base.is_dir() and list(base.glob("*DVDS*.[cC][sS][vV]")):
+            return base
         for p in base.rglob(sub):
             if p.is_dir() and list(p.glob("*DVDS*.[cC][sS][vV]")):
                 return p

@@ -51,22 +51,31 @@ class JiequnPanel(BasePanel):
 
         if data_type == "DC":
             from factories.jiequn.dc_cleaner import JiequnDCCleaner
-            return lambda: JiequnDCCleaner(input_dir=inp, output_dir=out).process_all()
+            return lambda: self._require_success("DC", JiequnDCCleaner(input_dir=inp, output_dir=out).process_all())
 
         elif data_type == "DVDS":
             from factories.jiequn.dvds_cleaner import JiequnDVDSCleaner
-            return lambda: JiequnDVDSCleaner(input_dir=inp, output_dir=out).process_all()
+            return lambda: self._require_success("DVDS", JiequnDVDSCleaner(input_dir=inp, output_dir=out).process_all())
 
         elif data_type == "RG":
             from factories.jiequn.rg_cleaner import JiequnRGCleaner
-            return lambda: JiequnRGCleaner(input_dir=inp, output_dir=out).process_all()
+            return lambda: self._require_success("RG", JiequnRGCleaner(input_dir=inp, output_dir=out).process_all())
 
         elif data_type == "统一CSV":
             from factories.jiequn.clean_unified import run
-            return lambda: run(input_dir=inp, output_dir=out)
+            return lambda: self._require_success("统一CSV", run(input_dir=inp, output_dir=out))
 
         elif data_type == "PAT":
             from factories.jiequn.pat_cleaner import build_pat, save_pat
-            return lambda: bool(save_pat(build_pat(out), out))
+            return lambda: self._require_success("PAT", bool(save_pat(build_pat(out), out)))
 
         return lambda: False
+
+    def _require_success(self, label: str, result: bool) -> bool:
+        if result:
+            return True
+        raise RuntimeError(
+            f"杰群 {label} 处理没有生成有效结果。请确认输入目录是否选对："
+            "DC/DVDS/RG 使用 杰群 格式1目录（可选 data/杰群、产品 PAT 目录或对应子目录）；"
+            "统一CSV 使用 data/杰群2/RAW；PAT 使用清洗后的输出目录。"
+        )

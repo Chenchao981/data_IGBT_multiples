@@ -40,6 +40,8 @@ class JiequnDCCleaner(BaseCleaner):
     def _get_dc_subdir(self) -> Path:
         sub = TYPE_SUBDIRS.get("DC", "DC")
         base = Path(self.input_dir)
+        if base.name.upper() == sub.upper() and base.is_dir() and list(base.glob("*.[cC][sS][vV]")):
+            return base
         for p in base.rglob(sub):
             if p.is_dir() and list(p.glob("*.[cC][sS][vV]")):
                 return p

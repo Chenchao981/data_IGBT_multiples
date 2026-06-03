@@ -35,6 +35,8 @@ class JiequnRGCleaner(BaseCleaner):
     def _get_subdir(self) -> Path:
         sub = TYPE_SUBDIRS.get("RG", "RG")
         base = Path(self.input_dir)
+        if base.name.upper() == sub.upper() and base.is_dir() and list(base.glob("*RG*.[cC][sS][vV]")):
+            return base
         for p in base.rglob(sub):
             if p.is_dir() and list(p.glob("*RG*.[cC][sS][vV]")):
                 return p
