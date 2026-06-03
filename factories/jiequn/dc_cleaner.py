@@ -2,7 +2,7 @@
 # -*- coding: utf-8 -*-
 
 """
-杰群 DC 数据清洗器
+杰群 · 数据格式1 — DC 数据清洗器
 
 从 CSV 提取 DC 参数（含测试条件增强），应用单位换算，输出 NUM + 周记 + 增强参数。
 """
@@ -17,9 +17,10 @@ import pandas as pd
 from factories.base.base_cleaner import BaseCleaner
 from factories.jiequn.config import UNIT_CONVERSIONS, TYPE_SUBDIRS
 from factories.jiequn.csv_parser import parse_dta_csv
+from factories.jiequn.formatting import BATCH_COL, normalize_output_columns
 from shared.excel_utils import write_excel_fast, generate_lot_based_filename
 
-DC_PARAMS = ["BVDSS", "IDSS", "IGSS", "ISGS", "VTH", "Rdson", "LRDON", "VF", "VFSDS", "CONT"]
+DC_PARAMS = ["VTH", "BVDSS", "IDSS", "ISGS", "RDON", "LRDON", "VF", "VFSD", "VFSDS", "CONT", "ABSDEL", "DELAY"]
 
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 logger = logging.getLogger(__name__)
@@ -86,8 +87,9 @@ class JiequnDCCleaner(BaseCleaner):
             merged.dropna(subset=['周记'], inplace=True)
             merged.reset_index(drop=True, inplace=True)
             merged.insert(0, 'NUM', range(1, len(merged) + 1))
+            merged = normalize_output_columns(merged, "DC")
 
-            zhouji_list = merged['周记'].tolist() if '周记' in merged.columns else ['unknown']
+            zhouji_list = merged[BATCH_COL].tolist() if BATCH_COL in merged.columns else ['unknown']
             filename = generate_lot_based_filename(zhouji_list, "DC_JQ")
             out = self.output_dir / filename
             write_excel_fast(merged, out, sheet_name='DC_Data')

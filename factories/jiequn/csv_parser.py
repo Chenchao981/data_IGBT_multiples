@@ -136,6 +136,7 @@ _PARAM_NAME_RULES = {
     "CONT":   "unit",
     "ABSDEL": "seq",
     "DELAY":  "unit",
+    "LRDON":  "bias",
 }
 
 # 参数 → 固定单位名
@@ -154,7 +155,36 @@ _PARAM_UNITS = {
     "ABSDEL": "",
     "DELAY":  "",
     "LCR-RG": "R",
+    "LRDON":  "mR",
 }
+
+
+def _normalize_item_name(name: str) -> str:
+    return re.sub(r"[^A-Z0-9]+", "", str(name).upper())
+
+
+def _item_matches_param(item_name: str, target_param: str) -> bool:
+    """Match DTA Item cells without letting short names eat longer params."""
+    item = str(item_name).strip().upper()
+    target = str(target_param).strip().upper()
+    norm_item = _normalize_item_name(item)
+    norm_target = _normalize_item_name(target)
+
+    aliases = {
+        "RDSON": {"RDON", "RDSON"},
+        "RDON": {"RDON", "RDSON"},
+        "LCRRG": {"LCRRG"},
+        "VF": {"VF"},
+        "VFSD": {"VFSD"},
+        "VFSDS": {"VFSDS"},
+    }
+    allowed = aliases.get(norm_target)
+    if allowed is not None:
+        return norm_item in allowed
+
+    if norm_item == norm_target:
+        return True
+    return item.startswith(target) and len(item) > len(target) and not item[len(target)].isalnum()
 
 
 def _get_bias_value(bias_values: List[str], csv_field_idx: int) -> str:
@@ -207,6 +237,9 @@ def _build_param_name(param_base: str, rule: str, bias_val: str, unit: str,
         return f"{param_base}{num}"
 
     elif rule == "bias":
+        if param_base.upper() == "ISGS" and bias_val.startswith("-"):
+            param_base = "IGSS"
+            bias_val = bias_val[1:]
         suffix = bias_val if bias_val else str(seq_counter.get(param_base, 0) + 1)
         seq_counter[param_base] = seq_counter.get(param_base, 0) + 1
         if unit:
@@ -265,7 +298,7 @@ def parse_dta_csv(file_path: str, target_params: List[str],
     for bp in target_params:
         found = False
         for i, name in enumerate(item_names):
-            if name and bp.upper() in name.upper():
+            if name and _item_matches_param(name, bp):
                 csv_field_idx = i + 1
                 col_matches.append((csv_field_idx, bp))
                 if unique_only:
@@ -313,7 +346,7 @@ def parse_dta_csv(file_path: str, target_params: List[str],
 
     raw = pd.read_csv(file_path, skiprows=info["data_start"], header=None,
                       names=range(n_cols),
-                      encoding='utf-8', engine='python', on_bad_lines='skip')
+                      low_memory=False, encoding='utf-8')
 
     valid = [(c, n) for c, n in zip(final_cols, final_names) if c < n_cols]
     if len(valid) <= 2:

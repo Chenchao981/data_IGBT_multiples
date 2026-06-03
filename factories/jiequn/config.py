@@ -24,7 +24,8 @@ UNIT_CONVERSIONS = {
     "IDSS":  {"from": "A",  "to": "nA", "factor": 1_000_000_000},  # 1e9
     "IGSS":  {"from": "A",  "to": "nA", "factor": 1_000_000_000},
     "ISGS":  {"from": "A",  "to": "nA", "factor": 1_000_000_000},
-    "Rdson": {"from": "Ω",  "to": "mR", "factor": 1_000},          # 1000
+    "RDON":  {"from": "Ω",  "to": "mR", "factor": 1_000},          # 1000
+    "Rdson": {"from": "Ω",  "to": "mR", "factor": 1_000},          # compatibility
     # DVDS 参数
     "DVDS":  {"from": "V",  "to": "mV", "factor": 1_000},          # V → mV
 }

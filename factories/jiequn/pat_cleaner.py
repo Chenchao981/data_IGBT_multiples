@@ -26,6 +26,7 @@ sys.path.append(str(project_root))
 import logging
 import pandas as pd
 import numpy as np
+from factories.jiequn.formatting import BATCH_COL
 from shared.excel_utils import write_excel_fast
 
 logging.basicConfig(
@@ -117,7 +118,7 @@ def build_pat(output_dir: str = "output/杰群-output") -> pd.DataFrame:
             df = pd.read_excel(fpath, engine='openpyxl')
 
         # 跳过 NUM / lot_ID 列
-        param_cols = [c for c in df.columns if c not in ('NUM', 'lot_ID', '周记')]
+        param_cols = [c for c in df.columns if c not in ('NUM', 'lot_ID', '周记', BATCH_COL)]
 
         for col in param_cols:
             stats = compute_pat_stats(df[col])

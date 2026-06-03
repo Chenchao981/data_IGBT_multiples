@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 
-"""杰群 RG 数据清洗器 — 输出 NUM + 周记 + RG(R)"""
+"""杰群 · 数据格式1 — RG 清洗器 — 输出 NUM + 周记 + RG(R)"""
 
 import sys
 from pathlib import Path
@@ -13,6 +13,7 @@ import pandas as pd
 from factories.base.base_cleaner import BaseCleaner
 from factories.jiequn.config import TYPE_SUBDIRS
 from factories.jiequn.csv_parser import parse_dta_csv
+from factories.jiequn.formatting import BATCH_COL, normalize_output_columns
 from shared.excel_utils import write_excel_fast, generate_lot_based_filename
 
 RG_PARAMS = ["LCR-RG"]
@@ -74,8 +75,9 @@ class JiequnRGCleaner(BaseCleaner):
             merged.dropna(subset=['周记'], inplace=True)
             merged.reset_index(drop=True, inplace=True)
             merged.insert(0, 'NUM', range(1, len(merged) + 1))
+            merged = normalize_output_columns(merged, "RG")
 
-            zhouji_list = merged['周记'].tolist()
+            zhouji_list = merged[BATCH_COL].tolist()
             filename = generate_lot_based_filename(zhouji_list, "RG_JQ")
             out = self.output_dir / filename
             write_excel_fast(merged, out, sheet_name='RG_Data')
