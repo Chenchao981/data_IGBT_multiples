@@ -9,6 +9,8 @@
 """
 
 import os
+import logging
+from contextlib import redirect_stdout, redirect_stderr
 from datetime import datetime
 from PyQt5.QtWidgets import (QWidget, QVBoxLayout, QHBoxLayout, QLabel,
                              QLineEdit, QPushButton, QTextEdit, QGroupBox,
@@ -30,15 +32,68 @@ class CleanerWorker(QThread):
         self.task_label = task_label
 
     def run(self):
+        writer = _SignalTextWriter(self.progress)
+        log_handler = _SignalLogHandler(self.progress)
+        log_handler.setFormatter(logging.Formatter('%(asctime)s - %(levelname)s - %(message)s'))
+        root_logger = logging.getLogger()
+        old_level = root_logger.level
+
         try:
             self.progress.emit(f"开始 {self.task_label}...")
-            result = self.task_fn()
+            if root_logger.level in (logging.NOTSET,) or root_logger.level > logging.INFO:
+                root_logger.setLevel(logging.INFO)
+            root_logger.addHandler(log_handler)
+            with redirect_stdout(writer), redirect_stderr(writer):
+                result = self.task_fn()
+                writer.flush()
             if result:
                 self.finished.emit(f"{self.task_label} 完成", True)
             else:
                 self.finished.emit(f"{self.task_label} 失败", False)
         except Exception as e:
             self.error.emit(str(e))
+        finally:
+            root_logger.removeHandler(log_handler)
+            root_logger.setLevel(old_level)
+
+
+class _SignalTextWriter:
+    """Redirect print/stdout text from a worker thread into the GUI log."""
+
+    def __init__(self, signal):
+        self.signal = signal
+        self._buffer = ""
+
+    def write(self, text: str):
+        if not text:
+            return 0
+        self._buffer += text
+        while "\n" in self._buffer:
+            line, self._buffer = self._buffer.split("\n", 1)
+            line = line.strip()
+            if line:
+                self.signal.emit(line)
+        return len(text)
+
+    def flush(self):
+        line = self._buffer.strip()
+        if line:
+            self.signal.emit(line)
+        self._buffer = ""
+
+
+class _SignalLogHandler(logging.Handler):
+    """Forward logging records from cleaner modules into the GUI log."""
+
+    def __init__(self, signal):
+        super().__init__()
+        self.signal = signal
+
+    def emit(self, record):
+        try:
+            self.signal.emit(self.format(record))
+        except Exception:
+            pass
 
 
 class BasePanel(QWidget):
