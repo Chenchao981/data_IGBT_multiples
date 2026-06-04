@@ -54,15 +54,13 @@ def run(input_dir, output_dir):
                 unique_only=unique,
                 preserve_source_order=True,
                 skip_match_counts={"VTH": 1} if label == "DC" else None,
-                prefer_source_units=True if label == "DC" else False,
             )
             for f in files
         ]
         dfs = [d for d in dfs if d is not None and not d.empty]
         if not dfs: print(f"{label}: 无数据"); continue
         merged = pd.concat(dfs, ignore_index=True, sort=False)
-        if label != "DC":
-            merged = apply_conv(merged)
+        merged = apply_conv(merged)
         merged.dropna(subset=["周记"], inplace=True)
         if label == "DVDS":
             before = len(merged)
