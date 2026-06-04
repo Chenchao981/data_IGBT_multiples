@@ -158,7 +158,7 @@ data/杰群2/RAW/
 | BVDSS1(V) | BVDSS，顺序编号 + 单位 |
 | IDSS100(nA) | IDSS，测试条件 + 单位（100=100V） |
 | ISGS25(nA) | ISGS，测试条件 + 单位 |
-| IGSS25(nA) | 由负偏置 ISGS（如 `ISGS-25`）规范化得到，去掉负号并改名为 IGSS |
+| IGSS25(nA) | 由正偏置 ISGS（如 `ISGS+25`）按杰群规则改名得到 |
 | DVDS(mV) | DVDS，V→mV 换算 |
 | RG(R) | RG，直接输出 |
 
@@ -175,7 +175,7 @@ data/杰群2/RAW/
 | 规则 | 示例 | 说明 |
 |------|------|------|
 | seq | VTH1(V), VTH2(V) | 顺序编号 + 单位 |
-| bias | IDSS100(nA), RDON40(mR), IGSS25(nA) | Bias Value + 单位；负偏置 ISGS 归一为 IGSS |
+| bias | IDSS100(nA), RDON40(mR), IGSS25(nA) | Bias Value + 单位；杰群负偏置 ISGS 保留为 ISGS，正偏置 ISGS 改名为 IGSS |
 | unit | DVDS(mV), VFSD(V) | 仅单位 |
 
 ### 参数排序规则
@@ -186,7 +186,7 @@ data/杰群2/RAW/
 NUM, 批次, VTH*, BVDSS*, IDSS*, ISGS*/IGSS*, RDON*, LRDON*, VF*, VFSD*, VFSDS*, DVDS*, RG*, CONT*, ABSDEL*, DELAY*
 ```
 
-其中 `ISGS` 和 `IGSS` 按同一偏置值成组排列，方便和日月新/旧版输出对照。
+其中杰群 `ISGS` 和 `IGSS` 按同一偏置值成组排列，并保持 `ISGS` 在前、`IGSS` 在后；其他封装厂仍按各自规则处理。
 
 杰群格式2（统一CSV）不做上述重排，按源 CSV `Item` 行从左到右保留参数顺序，只把内部 `周记` 列改名为 `批次`。
 
@@ -299,7 +299,7 @@ python gui/main_window.py
 
 ## 🔄 版本历史
 
-- **v2.2** (2026-06-03)：杰群输出统一为 `NUM + 批次 + 参数列`；新增 `formatting.py` 管理列排序；修复 `VF` 误匹配 `VFSDS`、`RDON/Rdson` 命名兼容、负偏置 `ISGS` 转 `IGSS`；PAT 跳过 `批次` 列。
+- **v2.2** (2026-06-03)：杰群输出统一为 `NUM + 批次 + 参数列`；新增 `formatting.py` 管理列排序；修复 `VF` 误匹配 `VFSDS`、`RDON/Rdson` 命名兼容、杰群 `ISGS/IGSS` 命名；PAT 跳过 `批次` 列。
 - **v2.1** (2025-06-01)：杰群统一CSV格式支持，参数增强命名，周记提取
 - **v2.0** (2025-05-29)：多封装厂模块化重构，新增杰群支持
 - **v1.2** (2025-01-20)：GUI 优化，lot_ID 文件命名
@@ -668,7 +668,7 @@ Sigma, LCL\n计算值, UCL\n计算值, LCL\n更新前, UCL\n更新前, LCL\n更�
 - 对每个 base param，迭代 `item_names` 找匹配列；当前采用 `_item_matches_param()` 做精确/别名匹配，避免 `VF` 误吃 `VFSDS` 这类短名误匹配。
 - `RDON` 与历史写法 `Rdson` 兼容，`LCR-RG` 统一输出为 `RG(R)`。
 - `bias` 规则：从 `Bias 1 Value` 行读取，科学计数法规范化（`1.000E+02` → `"100"`），嵌入列名：`IDSS100(nA)`。
-- 负偏置 `ISGS`（如 `-25`、`-20`、`-10`）会归一为 `IGSS25/20/10`，去掉负号后再输出。
+- 杰群漏电命名：负偏置 `ISGS`（如 `-25`、`-20`、`-10`）保留为 `ISGS25/20/10`，正偏置 `ISGS` 改名为 `IGSS25/20/10`，输出顺序保持 `ISGS25, IGSS25, ISGS20, IGSS20`。
 
 ### 1.1 杰群输出格式化
 - `factories/jiequn/formatting.py` 是杰群格式1的输出格式入口。

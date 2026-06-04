@@ -249,9 +249,11 @@ def _build_param_name(param_base: str, rule: str, bias_val: str, unit: str,
         return f"{param_base}{num}"
 
     elif rule == "bias":
-        if param_base.upper() == "ISGS" and bias_val.startswith("-"):
-            param_base = "IGSS"
-            bias_val = bias_val[1:]
+        if param_base.upper() == "ISGS":
+            if bias_val.startswith("-"):
+                bias_val = bias_val[1:]
+            elif bias_val:
+                param_base = "IGSS"
         suffix = bias_val if bias_val else str(seq_counter.get(param_base, 0) + 1)
         seq_counter[param_base] = seq_counter.get(param_base, 0) + 1
         if unit:
