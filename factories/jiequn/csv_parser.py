@@ -92,7 +92,7 @@ def read_header_info(file_path: str, max_scan: int = 40) -> dict:
           "data_start": int, "item_idx": int }
     """
     lines = _read_header_lines(file_path, max_scan)
-    info = {"item_names": [], "limit_units": [], "bias1_values": [],
+    info = {"item_names": [], "min_limits": [], "limit_units": [], "bias1_values": [],
             "data_start": -1, "item_idx": -1}
 
     for idx, line in enumerate(lines):
@@ -107,6 +107,9 @@ def read_header_info(file_path: str, max_scan: int = 40) -> dict:
 
         elif first == 'Limit Units':
             info["limit_units"] = parts[1:]
+
+        elif first == 'Min Limit':
+            info["min_limits"] = parts[1:]
 
         elif first == 'Bias 1 Value':
             info["bias1_values"] = parts[1:]
@@ -208,14 +211,21 @@ def _get_bias_value(bias_values: List[str], csv_field_idx: int) -> str:
     return ""
 
 
-def _get_unit(limit_units: List[str], csv_field_idx: int, param_base: str) -> str:
+def _get_unit(limit_units: List[str], csv_field_idx: int, param_base: str,
+              prefer_source_unit: bool = False) -> str:
     """获取某列的单位"""
+    i = csv_field_idx - 1
+    if prefer_source_unit and 0 <= i < len(limit_units):
+        u = limit_units[i].strip()
+        if u:
+            return u
+
     # 优先用预定义单位
     for key, unit in _PARAM_UNITS.items():
         if key.upper() == param_base.upper():
             return unit
+
     # 从 Limit Units 行读取
-    i = csv_field_idx - 1
     if 0 <= i < len(limit_units):
         u = limit_units[i].strip()
         if u:
@@ -270,7 +280,9 @@ def extract_lot_id_jiequn(filename: str) -> str:
 def parse_dta_csv(file_path: str, target_params: List[str],
                   max_scan: int = 40,
                   unique_only: bool = False,
-                  preserve_source_order: bool = False) -> Optional[pd.DataFrame]:
+                  preserve_source_order: bool = False,
+                  skip_match_counts: Optional[Dict[str, int]] = None,
+                  prefer_source_units: bool = False) -> Optional[pd.DataFrame]:
     """
     解析杰群 DTA CSV，提取目标参数并用增强名称（含测试条件+单位）。
 
@@ -279,6 +291,8 @@ def parse_dta_csv(file_path: str, target_params: List[str],
         target_params: 目标参数名列表，如 ["DVDS"] 匹配 Item 中的 DVDS_EX
         max_scan: 头部扫描行数
         preserve_source_order: True 时按 Item 行从左到右匹配，适用于统一 CSV 对照源数据
+        skip_match_counts: 指定参数跳过前 N 个匹配项，如 {"VTH": 1}
+        prefer_source_units: True 时优先使用源 CSV 的 Limit Units 行作为输出单位
 
     Returns:
         DataFrame，含 周记 + 增强参数列，失败返回 None
@@ -296,6 +310,10 @@ def parse_dta_csv(file_path: str, target_params: List[str],
     item_names = info["item_names"]
     bias_vals = info["bias1_values"]
     limit_units = info["limit_units"]
+    skip_match_counts = {
+        _normalize_item_name(k): v for k, v in (skip_match_counts or {}).items()
+    }
+    skipped_counts = {k: 0 for k in skip_match_counts}
 
     # 找到所有匹配列
     col_matches = []  # [(csv_field_idx, param_base)]
@@ -308,6 +326,10 @@ def parse_dta_csv(file_path: str, target_params: List[str],
                 if unique_only and bp in seen_params:
                     continue
                 if _item_matches_param(name, bp):
+                    skip_key = _normalize_item_name(bp)
+                    if skipped_counts.get(skip_key, 0) < skip_match_counts.get(skip_key, 0):
+                        skipped_counts[skip_key] = skipped_counts.get(skip_key, 0) + 1
+                        break
                     csv_field_idx = i + 1
                     col_matches.append((csv_field_idx, bp))
                     seen_params.add(bp)
@@ -317,6 +339,10 @@ def parse_dta_csv(file_path: str, target_params: List[str],
             found = False
             for i, name in enumerate(item_names):
                 if name and _item_matches_param(name, bp):
+                    skip_key = _normalize_item_name(bp)
+                    if skipped_counts.get(skip_key, 0) < skip_match_counts.get(skip_key, 0):
+                        skipped_counts[skip_key] = skipped_counts.get(skip_key, 0) + 1
+                        continue
                     csv_field_idx = i + 1
                     col_matches.append((csv_field_idx, bp))
                     if unique_only:
@@ -336,7 +362,7 @@ def parse_dta_csv(file_path: str, target_params: List[str],
     for fidx, pbase in col_matches:
         rule = _PARAM_NAME_RULES.get(pbase.upper(), "unit")
         bias_val = _get_bias_value(bias_vals, fidx) if rule == "bias" else ""
-        unit = _get_unit(limit_units, fidx, pbase)
+        unit = _get_unit(limit_units, fidx, pbase, prefer_source_units)
         name = _build_param_name(pbase, rule, bias_val, unit, seq_counters)
         use_cols.append(fidx)
         col_names.append(name)

@@ -14,6 +14,18 @@ import pandas as pd
 
 NUM_CONV = {"IDSS": 1e9, "IGSS": 1e9, "ISGS": 1e9, "RDON": 1000, "LRDON": 1000, "DVDS": 1000}
 
+DC_PARAMS = [
+    "LCR-RG",
+    "VTH",
+    "BVDSS",
+    "IDSS",
+    "ISGS",
+    "RDON",
+    "VFSDS",
+    "DELAY",
+    "ABSDEL",
+]
+
 def apply_conv(df):
     for col in df.columns:
         if col in ('周记', 'NUM'): continue
@@ -23,7 +35,7 @@ def apply_conv(df):
     return df
 
 TYPES = [
-    ("DC",   ["VTH","BVDSS","IDSS","ISGS","RDON","LRDON","VF","VFSD","VFSDS","ABSDEL","DELAY"], False),
+    ("DC",   DC_PARAMS, False),
     ("DVDS", ["DVDS"], True),
     ("RG",   ["LCR-RG"], True),
 ]
@@ -41,13 +53,16 @@ def run(input_dir, output_dir):
                 params,
                 unique_only=unique,
                 preserve_source_order=True,
+                skip_match_counts={"VTH": 1} if label == "DC" else None,
+                prefer_source_units=True if label == "DC" else False,
             )
             for f in files
         ]
         dfs = [d for d in dfs if d is not None and not d.empty]
         if not dfs: print(f"{label}: 无数据"); continue
         merged = pd.concat(dfs, ignore_index=True, sort=False)
-        merged = apply_conv(merged)
+        if label != "DC":
+            merged = apply_conv(merged)
         merged.dropna(subset=["周记"], inplace=True)
         if label == "DVDS":
             before = len(merged)

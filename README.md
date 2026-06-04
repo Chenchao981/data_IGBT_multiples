@@ -139,7 +139,9 @@ data/杰群2/RAW/
 格式2输出规则：
 - 按源 CSV `Item` 行从左到右的顺序输出参数，方便和源数据逐列对比。
 - 剔除 `CONT*` 计数字段（如 `CONT_TR`、`CONT_RF`、`CONT-B`、`CONT-C`、`CONT-E`）和 `SAME` 占位字段。
-- 多个同名参数按出现顺序编号，例如 `VTH_EX`、`VTH`、`VTH` 会输出为 `VTH1(V)`、`VTH2(V)`、`VTH3(V)`。
+- DC 参数白名单为 `LCR-RG`、跳过第一个 `VTH` 后的所有 `VTH`、`BVDSS`、`IDSS`、`ISGS`、`RDON`、`VFSDS`、`DELAY`、`ABSDEL`。
+- DC 会跳过源数据从左到右发现的第一个 `VTH`（封装厂参数，且 `Min Limit` 为空），第二个 `VTH` 开始重新编号为 `VTH1(V)`、`VTH2(V)`、`VTH3(V)`。
+- DC 输出单位优先取源 CSV `Limit Units` 行，数值保持源单位，不再对 DC 做 A→nA 或 R→mR 换算；DVDS 仍按既有规则输出为 `DVDS(mV)`。
 - `DVDS(mV)` 为空的记录行会在输出前删除，空值不参与后续统计。
 
 ---
@@ -565,10 +567,11 @@ _PARAM_UNITS = {
 ### `factories/jiequn/clean_unified.py` (杰群批次2)
 
 模块级 `run(input_dir, output_dir)` 函数（非类）：
-- 硬编码 `NUM_CONV = {"IDSS": 1e9, "IGSS": 1e9, "ISGS": 1e9, "RDON": 1000, "LRDON": 1000, "DVDS": 1000}`。
-- 硬编码 `TYPES = [("DC", [...], False), ("DVDS", [...], True), ("RG", [...], True)]`。
+- `DC_PARAMS` 是格式2 DC 白名单：`LCR-RG`、跳过第一个 `VTH` 后的所有 `VTH`、`BVDSS`、`IDSS`、`ISGS`、`RDON`、`VFSDS`、`DELAY`、`ABSDEL`。
+- DC 使用 `prefer_source_units=True`，列名单位取源 CSV `Limit Units` 行，且不调用 `apply_conv()`；DVDS/RG 仍沿用既有规则。
+- `NUM_CONV` 只继续用于 DVDS 等非 DC 输出的既有换算。
 - 对 `*DTA.CSV` 一次遍历，输出三个文件 `mixed_<label>_JQ2_<ts>.xlsx`。
-- 输出前调用 `normalize_output_columns()`，统一 `批次` 列和参数顺序。
+- 输出前调用 `_normalize_unified_columns()`，统一 `批次` 列但保留源参数顺序。
 - CLI: `python factories/jiequn/clean_unified.py <in> <out>`
 
 ### `factories/jiequn/pat_cleaner.py`
@@ -651,9 +654,10 @@ Sigma, LCL\n计算值, UCL\n计算值, LCL\n更新前, UCL\n更新前, LCL\n更�
 - DVDS 通过 monkey-patch 调整 `c.dvds_dir` / `c.output_dir`（因为 `DVDSCleaner` 内部用 `base_dir` 派生路径）。
 
 **`panels/jiequn_panel.py`：** 第一行 4 个清洗入口（DC / DVDS / RG / 统一CSV），第二行清洗后统计（PAT）。
+- 输入/输出默认路径与日月新一致，启动后都指向用户桌面。
 - "统一CSV" 调 `clean_unified.run(inp, out)`。
 - "PAT" 调 `save_pat(build_pat(out), out)`。
-- 选择 "统一CSV" 时自动切到 `data/杰群2/RAW` / `output/杰群2`；选择 DC/DVDS/RG/PAT 时自动切回 `data/杰群` / `output/杰群-output`。
+- 用户选择 DC/DVDS/RG/统一CSV/PAT 时不会覆盖手动选择的桌面或业务目录；历史样例路径仅作为代码中的备用常量保留。
 
 ---
 
@@ -678,9 +682,9 @@ Sigma, LCL\n计算值, UCL\n计算值, LCL\n更新前, UCL\n更新前, LCL\n更�
 ### 3. 单位换算策略
 **两个实现并存：**
 - **`BaseCleaner._apply_unit_conversions`**（杰群批次1）：按 param 子串匹配列名，匹配则乘以 factor。
-- **`clean_unified.apply_conv` / `unified_cleaner._apply_conv`**（批次2 + 备选）：硬编码 `dict[param: factor]`，子串匹配。
+- **`clean_unified.apply_conv` / `unified_cleaner._apply_conv`**（批次2 + 备选）：硬编码 `dict[param: factor]`，子串匹配；当前格式2 DC 已改为源单位输出，不调用该换算。
 
-> ⚠️ 单位换算仍按列名子串识别参数，解析阶段已经避免 `VF/VFSDS` 误匹配。后续如新增名称重叠的参数，应同步检查 `UNIT_CONVERSIONS` 和 `clean_unified.NUM_CONV`。
+> ⚠️ 单位换算仍按列名子串识别参数，解析阶段已经避免 `VF/VFSDS` 误匹配。后续如新增名称重叠的参数，应同步检查 `UNIT_CONVERSIONS` 和 `clean_unified.NUM_CONV`；格式2 DC 还要同步检查 `DC_PARAMS` 白名单。
 
 ### 4. PAT 统计
 - `Sigma = (Q3 - Q1) / 1.35`（IQR → σ 等价因子，针对正态数据）
