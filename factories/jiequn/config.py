@@ -36,3 +36,20 @@ TYPE_SUBDIRS = {
     "DVDS": "DVDS",
     "RG": "RG",
 }
+
+# Shared DC selection rules for Jiequn format1 and format2.
+# Keep this list as the single source of truth so both input formats
+# filter parameters the same way.
+JIEQUN_DC_PARAMS = [
+    "LCR-RG",
+    "VTH",
+    "BVDSS",
+    "IDSS",
+    "ISGS",
+    "RDON",
+    "VFSDS",
+    "ABSDEL",
+]
+
+# 第一个 VTH 是封装厂占位测试；IDSS 均为有效漏电测试，必须全部保留。
+JIEQUN_DC_SKIP_MATCH_COUNTS = {"VTH": 1}

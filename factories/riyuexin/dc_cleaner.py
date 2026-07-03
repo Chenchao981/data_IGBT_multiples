@@ -28,7 +28,8 @@ from shared.excel_utils import (
     write_excel_fast, 
     scan_excel_files, 
     extract_batch_id, 
-    generate_lot_based_filename
+    create_output_run_dir,
+    generate_run_filename
 )
 
 # 配置日志
@@ -361,8 +362,8 @@ class DCDataCleaner:
             lot_ids = df['lot_ID'].tolist() if 'lot_ID' in df.columns else ['unknown']
             
             # 使用lot_id生成文件名
-            filename = generate_lot_based_filename(lot_ids, "DC")
-            output_file = self.output_dir / filename
+            run_dir = create_output_run_dir(self.output_dir, lot_ids)
+            output_file = run_dir / generate_run_filename(run_dir)
             
             # 使用excel_utils中的快速写入函数
             success = write_excel_fast(df, output_file, sheet_name='DC_Data')
@@ -455,4 +456,4 @@ def main():
 
 
 if __name__ == "__main__":
-    main() 
+    main()

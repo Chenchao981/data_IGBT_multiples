@@ -7,24 +7,15 @@
 import sys
 sys.path.insert(0, '.')
 from pathlib import Path
+from factories.jiequn.config import JIEQUN_DC_PARAMS, JIEQUN_DC_SKIP_MATCH_COUNTS
 from factories.jiequn.csv_parser import parse_dta_csv
 from factories.jiequn.formatting import BATCH_COL, LEGACY_BATCH_COL
-from shared.excel_utils import write_excel_fast, generate_lot_based_filename
+from shared.excel_utils import create_output_run_dir, generate_run_filename, write_excel_fast
 import pandas as pd
 
 NUM_CONV = {"IDSS": 1e9, "IGSS": 1e9, "ISGS": 1e9, "RDON": 1000, "LRDON": 1000, "DVDS": 1000}
 
-DC_PARAMS = [
-    "LCR-RG",
-    "VTH",
-    "BVDSS",
-    "IDSS",
-    "ISGS",
-    "RDON",
-    "VFSDS",
-    "DELAY",
-    "ABSDEL",
-]
+DC_PARAMS = JIEQUN_DC_PARAMS
 
 def apply_conv(df):
     for col in df.columns:
@@ -46,6 +37,7 @@ def run(input_dir, output_dir):
     files = sorted(inp.glob("*DTA.CSV"))
     print(f"文件: {len(files)}")
     success = False
+    run_dir = None
     for label, params, unique in TYPES:
         dfs = [
             parse_dta_csv(
@@ -53,7 +45,7 @@ def run(input_dir, output_dir):
                 params,
                 unique_only=unique,
                 preserve_source_order=True,
-                skip_match_counts={"VTH": 1} if label == "DC" else None,
+                skip_match_counts=JIEQUN_DC_SKIP_MATCH_COUNTS if label == "DC" else None,
             )
             for f in files
         ]
@@ -72,8 +64,10 @@ def run(input_dir, output_dir):
         merged.reset_index(drop=True, inplace=True)
         merged.insert(0, "NUM", range(1, len(merged)+1))
         merged = _normalize_unified_columns(merged)
-        fname = generate_lot_based_filename(merged[BATCH_COL].tolist(), f"{label}_JQ2")
-        write_excel_fast(merged, out / fname, sheet_name=f"{label}_Data")
+        if run_dir is None:
+            run_dir = create_output_run_dir(out, merged[BATCH_COL].tolist())
+        fname = generate_run_filename(run_dir, label)
+        write_excel_fast(merged, run_dir / fname, sheet_name=f"{label}_Data")
         print(f"{label}: {len(merged):,} 行 -> {fname}")
         success = True
     return success

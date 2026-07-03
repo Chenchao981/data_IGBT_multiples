@@ -344,6 +344,54 @@ def generate_lot_based_filename(lot_ids: list, data_type: str, extension: str = 
         return f"mixed_{data_type}_{timestamp}{extension}"
 
 
+def create_output_run_dir(output_dir: Union[str, Path], batch_ids: list) -> Path:
+    """
+    Create a numbered output folder such as FA4Z-2484_001 or 2026W23_001.
+
+    The first valid batch/week value is always used as the folder prefix,
+    including runs that contain multiple batches or weeks. The sequence number
+    always advances so repeated runs stay separate and easy to review.
+    """
+    base_dir = Path(output_dir)
+    base_dir.mkdir(parents=True, exist_ok=True)
+
+    values = []
+    for value in batch_ids:
+        if pd.isna(value):
+            continue
+        text = str(value).strip()
+        if text and text.lower() not in {"nan", "none"} and text not in values:
+            values.append(text)
+
+    prefix = values[0] if values else "unknown"
+    prefix = re.sub(r'[<>:"/\\|?*\x00-\x1f]', "_", prefix).strip(" ._")
+    prefix = prefix[:80] or "unknown"
+
+    pattern = re.compile(rf"^{re.escape(prefix)}_(\d{{3,}})$", re.IGNORECASE)
+    sequence = max(
+        (
+            int(match.group(1))
+            for path in base_dir.iterdir()
+            if path.is_dir() and (match := pattern.match(path.name))
+        ),
+        default=0,
+    ) + 1
+
+    while True:
+        run_dir = base_dir / f"{prefix}_{sequence:03d}"
+        try:
+            run_dir.mkdir()
+            return run_dir
+        except FileExistsError:
+            sequence += 1
+
+
+def generate_run_filename(run_dir: Union[str, Path], data_type: str = "", extension: str = ".xlsx") -> str:
+    """Generate a filename from the numbered run folder name."""
+    suffix = f"_{data_type}" if data_type else ""
+    return f"{Path(run_dir).name}{suffix}{extension}"
+
+
 # 性能统计工具
 class PerformanceStats:
     """性能统计工具"""

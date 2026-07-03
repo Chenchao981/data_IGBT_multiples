@@ -1,3 +1,13 @@
 ﻿~$*
 data/
 output/
+
+# Python/runtime generated files
+__pycache__/
+*.py[cod]
+*.log
+
+# Local build and versioned delivery archives; the current root PYZ remains tracked.
+packaging/_temp_secure_build_src/
+packaging/release/FT_Data_Cleaner_v*/
+packaging/release/history_arthive/

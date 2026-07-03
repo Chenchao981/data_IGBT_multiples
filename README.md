@@ -11,6 +11,7 @@
 | **日月新 (ASE)** | .xlsx 分目录 | DC / DVDS / RG | ✅ 稳定 |
 | **杰群 批次1** | .csv 分目录 | DC / DVDS / RG | ✅ 稳定 |
 | **杰群 批次2** | .csv 统一CSV | DC+DVDS+RG 合并 | ✅ 稳定 |
+| **杰群 第三产线** | .csv 产品目录平铺、可变尾空列 | DC | ✅ 可用 |
 | 杰群 PAT | — | 统计汇总 | ✅ 可用 |
 
 ---
@@ -54,7 +55,8 @@ data_IGBT_multiple/
 │
 ├── data/                           ← 原始数据
 │   ├── 杰群/                       ← 批次1: 分目录 (DC/DVDS/RG)
-│   └── 杰群2/RAW/                  ← 批次2: 统一CSV
+│   ├── 杰群2/RAW/                  ← 批次2: 统一CSV
+│   └── DC1/<产品>/                 ← 第三产线: DC DTA CSV 直接存放
 │
 ├── output/                         ← 清洗输出
 │
@@ -77,6 +79,7 @@ python gui/main_window.py
 | 按钮 | 处理的数据格式 | 输入目录示例 | 输出 |
 |------|---------------|-------------|------|
 | **DC** | 分目录（data/杰群/.../DC/） | 指向 `data/杰群` | NUM + 批次 + DC参数 |
+| **DC-3** | 第三产线产品目录平铺 DTA CSV | 指向 `data/DC1` 或产品目录 | NUM + 批次 + DC参数 |
 | **DVDS** | 分目录（data/杰群/.../DVDS/） | 指向 `data/杰群` | NUM + 批次 + DVDS(mV) |
 | **RG** | 分目录（data/杰群/.../RG/） | 指向 `data/杰群` | NUM + 批次 + RG(R) |
 | **统一CSV** | 单个CSV含全部参数（data/杰群2/RAW/） | 指向 `data/杰群2/RAW` | DC.xlsx + DVDS.xlsx + RG.xlsx |
@@ -139,10 +142,31 @@ data/杰群2/RAW/
 格式2输出规则：
 - 按源 CSV `Item` 行从左到右的顺序输出参数，方便和源数据逐列对比。
 - 剔除 `CONT*` 计数字段（如 `CONT_TR`、`CONT_RF`、`CONT-B`、`CONT-C`、`CONT-E`）和 `SAME` 占位字段。
-- DC 参数白名单为 `LCR-RG`、跳过第一个 `VTH` 后的所有 `VTH`、`BVDSS`、`IDSS`、`ISGS`、`RDON`、`VFSDS`、`DELAY`、`ABSDEL`。
-- DC 会跳过源数据从左到右发现的第一个 `VTH`（封装厂参数，且 `Min Limit` 为空），第二个 `VTH` 开始重新编号为 `VTH1(V)`、`VTH2(V)`、`VTH3(V)`。
+- DC 参数白名单为 `LCR-RG`、跳过第一个 `VTH` 后的所有 `VTH`、`BVDSS`、全部 `IDSS`、`ISGS`、`RDON`、`VFSDS`、`ABSDEL`。
+- DC 只跳过源数据从左到右发现的第一个 `VTH`（封装厂占位测试），后续 `VTH` 从 `VTH1(V)` 开始重新编号；所有 `IDSS` 均保留并按 `Bias 1 Value` 命名，如 `IDSS-40(nA)`、`IDSS-35(nA)`，同名时输出为 `IDSS3.5-1(nA)`、`IDSS3.5-2(nA)`。
 - DC 输出单位沿用杰群规则：`IDSS/IGSS/ISGS` 输出为 `nA`，`RDON` 输出为 `mR`，并执行对应数值换算；DVDS 输出为 `DVDS(mV)`。
 - `DVDS(mV)` 为空的记录行会在输出前删除，空值不参与后续统计。
+
+### 数据格式3 — 第三产线 DC
+
+第三产线数据放在 `data/DC1/<产品>/`，没有单独的 `DC/` 子目录。GUI 使用
+`DC-3` 按钮，文件名包含
+`FADTA`、`FRDTA` 或 `FA1DTA`，现有 DC 入口会递归扫描并全部纳入。
+
+头部的 Item、Limit Units、Bias 1 Value 和参数定义与杰群格式1一致；差异是
+表头可能只有2列，也可能因末尾空逗号显示为26列，数据行因失效测试提前终止而
+保留3～47个字段。解析器只根据实际数据段最宽行确定 pandas 列数，再读取目标
+参数列，避免表头26列、数据25列导致 `ParserError`。
+
+调用方式：
+
+```python
+from factories.jiequn.dc_cleaner import JiequnDCCleaner
+JiequnDCCleaner("data/DC1", "output/DC1").process_all()
+```
+
+输出继续使用格式1契约：`NUM + 批次 + DC参数`、`DC_Data` 工作表、相同参数
+命名/排序和单位换算。详见 `docs/杰群第三产线DC格式说明.md`。
 
 ---
 
@@ -156,7 +180,7 @@ data/杰群2/RAW/
 | 批次 | 从文件名提取的批次标识（`split('_')[1]`），旧代码内部变量名仍可能叫 `周记` |
 | VTH1(V) | VTH 参数，顺序编号 + 单位 |
 | BVDSS1(V) | BVDSS，顺序编号 + 单位 |
-| IDSS100(nA) | IDSS，测试条件 + 单位（100=100V） |
+| IDSS100(nA) | IDSS，测试条件来自 `Bias 1 Value` 行（100=100V）；同名时在单位前加 `-1`、`-2` |
 | ISGS25(nA) | ISGS，测试条件 + 单位 |
 | IGSS25(nA) | 由正偏置 ISGS（如 `ISGS+25`）按杰群规则改名得到 |
 | DVDS(mV) | DVDS，V→mV 换算 |
@@ -175,7 +199,7 @@ data/杰群2/RAW/
 | 规则 | 示例 | 说明 |
 |------|------|------|
 | seq | VTH1(V), VTH2(V) | 顺序编号 + 单位 |
-| bias | IDSS100(nA), RDON40(mR), IGSS25(nA) | Bias Value + 单位；杰群负偏置 ISGS 保留为 ISGS，正偏置 ISGS 改名为 IGSS |
+| bias | IDSS100(nA), RDON40(mR), IGSS25(nA) | Bias Value + 单位；IDSS 同名时在单位前加 `-1/-2`；杰群负偏置 ISGS 保留为 ISGS，正偏置 ISGS 改名为 IGSS |
 | unit | DVDS(mV), VFSD(V) | 仅单位 |
 
 ### 参数排序规则
@@ -271,6 +295,9 @@ python factories/jiequn/rg_cleaner.py
 # 杰群 批次2（统一CSV）
 python factories/jiequn/clean_unified.py data/杰群2/RAW output/杰群2
 
+# 杰群 第三产线 DC
+python -c "from factories.jiequn.dc_cleaner import JiequnDCCleaner; JiequnDCCleaner('data/DC1', 'output/DC1').process_all()"
+
 # PAT 统计
 python -c "from factories.jiequn.pat_cleaner import build_pat, save_pat; save_pat(build_pat('output/杰群-output'))"
 
@@ -299,6 +326,10 @@ python gui/main_window.py
 
 ## 🔄 版本历史
 
+- **v2.4** (2026-07-03)：PAT 支持显式选择一个或多个清洗 Excel；逐个读取并合并 `DC_Data_1/2/3` 等编号 Sheet，Calamine 优先，确保整本工作簿数据参与统一四分位数计算。
+- **v2.3.2** (2026-07-03)：修复 DC 清洗误跳过首个有效 IDSS；现在保留全部 IDSS，第三产线输出新增 `IDSS-40(nA)`。
+- **v2.3.1** (2026-07-02)：修复 DC-3 完整数据中 Item/Serial 尾空列导致的 `expected 26 and found 25`；全量100文件、268万行验证通过。
+- **v2.3** (2026-07-02)：支持杰群第三产线 DC 平铺目录和25～47字段可变尾空列格式；保持既有DC输出契约。
 - **v2.2** (2026-06-03)：杰群输出统一为 `NUM + 批次 + 参数列`；新增 `formatting.py` 管理列排序；修复 `VF` 误匹配 `VFSDS`、`RDON/Rdson` 命名兼容、杰群 `ISGS/IGSS` 命名；PAT 跳过 `批次` 列。
 - **v2.1** (2025-06-01)：杰群统一CSV格式支持，参数增强命名，周记提取
 - **v2.0** (2025-05-29)：多封装厂模块化重构，新增杰群支持
@@ -550,7 +581,7 @@ _PARAM_UNITS = {
 ### `factories/jiequn/dc_cleaner.py` 等
 
 - `JiequnDCCleaner(BaseCleaner)`：
-  - `DC_PARAMS = ["VTH", "BVDSS", "IDSS", "ISGS", "RDON", "LRDON", "VF", "VFSD", "VFSDS", "CONT", "ABSDEL", "DELAY"]`
+  - `DC_PARAMS` 统一来自 `factories/jiequn/config.py` 的 `JIEQUN_DC_PARAMS`，适用于杰群格式1、格式2和第三产线：`LCR-RG`、跳过第一个 `VTH` 后的所有 `VTH`、`BVDSS`、全部 `IDSS`、`ISGS`、`RDON`、`VFSDS`、`ABSDEL`。
   - 文件 glob: `*DTA*.CSV`（不区分大小写），fallback 排除 `*_DVDS*`、`*_RG*`、`*PAT*`。
   - `unique_only=False`：保留**所有匹配列**（VTH1, VTH2, …）。
   - 输出：`DC_JQ` 前缀，最终列顺序由 `formatting.normalize_output_columns()` 统一。
@@ -567,7 +598,7 @@ _PARAM_UNITS = {
 ### `factories/jiequn/clean_unified.py` (杰群批次2)
 
 模块级 `run(input_dir, output_dir)` 函数（非类）：
-- `DC_PARAMS` 是格式2 DC 白名单：`LCR-RG`、跳过第一个 `VTH` 后的所有 `VTH`、`BVDSS`、`IDSS`、`ISGS`、`RDON`、`VFSDS`、`DELAY`、`ABSDEL`。
+- `DC_PARAMS` 是杰群各 CSV 格式共用 DC 白名单：`LCR-RG`、跳过第一个 `VTH` 后的所有 `VTH`、`BVDSS`、全部 `IDSS`、`ISGS`、`RDON`、`VFSDS`、`ABSDEL`。
 - DC 沿用杰群目标单位命名，并调用 `apply_conv()` 做 A→nA、R→mR 等换算；不参考日月新的源单位逻辑。
 - `NUM_CONV` 用于格式2统一CSV的杰群单位换算。
 - 对 `*DTA.CSV` 一次遍历，输出三个文件 `mixed_<label>_JQ2_<ts>.xlsx`。
@@ -653,10 +684,10 @@ Sigma, LCL\n计算值, UCL\n计算值, LCL\n更新前, UCL\n更新前, LCL\n更�
 **`panels/riyuexin_panel.py`：** 3 按钮（DC / DVDS / RG），默认路径 `~/Desktop`。
 - DVDS 通过 monkey-patch 调整 `c.dvds_dir` / `c.output_dir`（因为 `DVDSCleaner` 内部用 `base_dir` 派生路径）。
 
-**`panels/jiequn_panel.py`：** 第一行 4 个清洗入口（DC / DVDS / RG / 统一CSV），第二行清洗后统计（PAT）。
+**`panels/jiequn_panel.py`：** 第一行包含 DC / DC-3 / DVDS / RG / 统一CSV 清洗入口，第二行是 PAT 参数分析，第三行是 SYL&SBL 良率分析。
 - 输入/输出默认路径与日月新一致，启动后都指向用户桌面。
 - "统一CSV" 调 `clean_unified.run(inp, out)`。
-- "PAT" 调 `save_pat(build_pat(out), out)`。
+- "PAT" 可显式多选一个或多个清洗 Excel；同一文件内的 `DC_Data_1/2/3` 等编号 Sheet 会逐个读取并按参数合并。
 - 用户选择 DC/DVDS/RG/统一CSV/PAT 时不会覆盖手动选择的桌面或业务目录；历史样例路径仅作为代码中的备用常量保留。
 
 ---
@@ -667,7 +698,7 @@ Sigma, LCL\n计算值, UCL\n计算值, LCL\n更新前, UCL\n更新前, LCL\n更�
 - `parse_dta_csv` 不假定固定列顺序，锚定 `Item` 行（前 40 行内）。
 - 对每个 base param，迭代 `item_names` 找匹配列；当前采用 `_item_matches_param()` 做精确/别名匹配，避免 `VF` 误吃 `VFSDS` 这类短名误匹配。
 - `RDON` 与历史写法 `Rdson` 兼容，`LCR-RG` 统一输出为 `RG(R)`。
-- `bias` 规则：从 `Bias 1 Value` 行读取，科学计数法规范化（`1.000E+02` → `"100"`），嵌入列名：`IDSS100(nA)`。
+- `bias` 规则：从 `Bias 1 Value` 行读取，科学计数法规范化（`1.000E+02` → `"100"`）。`IDSS` 输出为 `IDSS100(nA)` 这类列名，同名时保留全部并在单位前加 `-1/-2`；其他 bias 参数仍保留单位，如 `RDON40(mR)`。
 - 杰群漏电命名：负偏置 `ISGS`（如 `-25`、`-20`、`-10`）保留为 `ISGS25/20/10`，正偏置 `ISGS` 改名为 `IGSS25/20/10`，输出顺序保持 `ISGS25, IGSS25, ISGS20, IGSS20`。
 
 ### 1.1 杰群输出格式化

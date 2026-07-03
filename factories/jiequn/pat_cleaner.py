@@ -17,8 +17,12 @@
     LCL更新前 | UCL更新前 | LCL更新后 | UCL更新后 | 是否更新
 """
 
+import gc
+import re
 import sys
+from collections import defaultdict
 from pathlib import Path
+from typing import Iterable
 
 project_root = Path(__file__).resolve().parent.parent.parent
 sys.path.append(str(project_root))
@@ -27,13 +31,17 @@ import logging
 import pandas as pd
 import numpy as np
 from factories.jiequn.formatting import BATCH_COL
-from shared.excel_utils import write_excel_fast
+from shared.excel_utils import create_output_run_dir, generate_run_filename, write_excel_fast
 
 logging.basicConfig(
     level=logging.INFO,
     format='%(asctime)s - %(levelname)s - %(message)s'
 )
 logger = logging.getLogger(__name__)
+
+DATA_LABELS = ("DC", "DVDS", "RG")
+IDENTIFIER_COLUMNS = {"NUM", "lot_ID", "周记", BATCH_COL}
+DATA_SHEET_PATTERN = re.compile(r"^(DC|DVDS|RG)_Data(?:_(\d+))?$", re.IGNORECASE)
 
 # PAT 表头
 PAT_HEADERS = [
@@ -91,39 +99,171 @@ def compute_pat_stats(series: pd.Series, lsl: float = None, usl: float = None) -
     }
 
 
-def build_pat(output_dir: str = "output/杰群-output") -> pd.DataFrame:
-    """
-    从 output/杰群-output/ 下的 DC/DVDS/RG 输出构建 PAT 表。
+def _open_workbook(path: Path) -> pd.ExcelFile:
+    """Open a workbook with Calamine first and a compatible fallback."""
+    try:
+        return pd.ExcelFile(path, engine="calamine")
+    except Exception as exc:
+        logger.warning(f"Calamine 打开失败，回退到 openpyxl: {path.name}: {exc}")
+        return pd.ExcelFile(path, engine="openpyxl")
 
-    扫描最新的 mixed_DC_JQ_*.xlsx, mixed_DVDS_JQ_*.xlsx, mixed_RG_JQ_*.xlsx，
-    对每个参数列计算统计量。
-    """
-    output_path = Path(output_dir)
-    rows = []
 
-    # 查找最新的各类型输出
-    for prefix, label in [("mixed_DC_JQ_", "DC"), ("mixed_DVDS_JQ_", "DVDS"), ("mixed_RG_JQ_", "RG")]:
-        files = sorted(output_path.glob(f"{prefix}*.xlsx"),
-                       key=lambda p: p.stat().st_mtime, reverse=True)
-        if not files:
-            logger.warning(f"  未找到 {label} 输出文件 ({prefix}*.xlsx)")
+def _matching_data_sheets(sheet_names: Iterable[str]) -> dict[str, list[str]]:
+    """Return DC/DVDS/RG sheets, including numbered split sheets."""
+    matches: dict[str, list[tuple[int, str]]] = {label: [] for label in DATA_LABELS}
+    for sheet_name in sheet_names:
+        match = DATA_SHEET_PATTERN.fullmatch(str(sheet_name).strip())
+        if not match:
             continue
+        label = match.group(1).upper()
+        sequence = int(match.group(2) or 0)
+        matches[label].append((sequence, sheet_name))
+    return {
+        label: [name for _, name in sorted(items, key=lambda item: (item[0], item[1]))]
+        for label, items in matches.items()
+    }
 
-        fpath = files[0]
-        logger.info(f"  读取 {label}: {fpath.name}")
 
-        try:
-            df = pd.read_excel(fpath, engine='calamine')
-        except Exception:
-            df = pd.read_excel(fpath, engine='openpyxl')
+def _valid_source_file(path: Path) -> bool:
+    return (
+        path.is_file()
+        and path.suffix.lower() in {".xlsx", ".xls"}
+        and not path.name.startswith("~$")
+        and not path.parent.name.upper().startswith("PAT_")
+    )
 
-        # 跳过 NUM / lot_ID 列
-        param_cols = [c for c in df.columns if c not in ('NUM', 'lot_ID', '周记', BATCH_COL)]
 
-        for col in param_cols:
-            stats = compute_pat_stats(df[col])
-            if stats:
-                rows.append(stats)
+def _inspect_workbook(path: Path) -> dict[str, list[str]]:
+    try:
+        with _open_workbook(path) as workbook:
+            return _matching_data_sheets(workbook.sheet_names)
+    except Exception as exc:
+        logger.warning(f"跳过无法读取的 Excel: {path}: {exc}")
+        return {label: [] for label in DATA_LABELS}
+
+
+def _resolve_sheet_sources(
+    source_dir: str | Path | None,
+    source_files: Iterable[str | Path] | str | Path | None,
+) -> dict[str, list[tuple[Path, str]]]:
+    """Resolve explicit files or the legacy directory input into sheet sources."""
+    resolved: dict[str, list[tuple[Path, str]]] = {label: [] for label in DATA_LABELS}
+
+    if source_files is not None:
+        values = [source_files] if isinstance(source_files, (str, Path)) else list(source_files)
+        selected: list[Path] = []
+        for value in values:
+            path = Path(value).expanduser().resolve()
+            if not _valid_source_file(path):
+                raise ValueError(f"PAT 输入不是有效的 Excel 文件: {path}")
+            if path not in selected:
+                selected.append(path)
+        if not selected:
+            raise ValueError("PAT 至少需要选择一个清洗结果 Excel 文件")
+
+        for path in selected:
+            sheets = _inspect_workbook(path)
+            for label in DATA_LABELS:
+                resolved[label].extend((path, sheet) for sheet in sheets[label])
+        return resolved
+
+    source_path = Path(source_dir or "output/杰群-output").expanduser().resolve()
+    if source_path.is_file():
+        return _resolve_sheet_sources(None, [source_path])
+    if not source_path.is_dir():
+        raise FileNotFoundError(f"PAT 清洗结果目录不存在: {source_path}")
+
+    # 兼容原目录入口：每种数据类型仍选最近的一个工作簿，但读取其全部编号 Sheet。
+    candidates: dict[str, list[tuple[float, Path, list[str]]]] = {
+        label: [] for label in DATA_LABELS
+    }
+    for path in source_path.rglob("*.xlsx"):
+        if not _valid_source_file(path):
+            continue
+        sheets = _inspect_workbook(path)
+        for label in DATA_LABELS:
+            if sheets[label]:
+                candidates[label].append((path.stat().st_mtime, path, sheets[label]))
+
+    for label in DATA_LABELS:
+        if not candidates[label]:
+            continue
+        _, path, sheets = max(candidates[label], key=lambda item: item[0])
+        resolved[label].extend((path, sheet) for sheet in sheets)
+    return resolved
+
+
+def _read_sheet(path: Path, sheet_name: str) -> pd.DataFrame:
+    try:
+        return pd.read_excel(path, sheet_name=sheet_name, engine="calamine")
+    except Exception as exc:
+        logger.warning(
+            f"Calamine 读取失败，回退到 openpyxl: {path.name}/{sheet_name}: {exc}"
+        )
+        return pd.read_excel(path, sheet_name=sheet_name, engine="openpyxl")
+
+
+def _build_label_rows(label: str, sources: list[tuple[Path, str]]) -> list[dict]:
+    """Read one sheet at a time and merge numeric values by parameter."""
+    parameter_chunks: dict[str, list[np.ndarray]] = defaultdict(list)
+    total_rows = 0
+
+    for path, sheet_name in sources:
+        logger.info(f"读取 {label}: {path.name} / {sheet_name}")
+        frame = _read_sheet(path, sheet_name)
+        sheet_rows = len(frame)
+        total_rows += sheet_rows
+        for column in frame.columns:
+            if column in IDENTIFIER_COLUMNS:
+                continue
+            values = (
+                pd.to_numeric(frame[column], errors="coerce")
+                .dropna()
+                .to_numpy(dtype=np.float64, copy=True)
+            )
+            if values.size:
+                parameter_chunks[str(column)].append(values)
+        logger.info(f"完成 {sheet_name}: {sheet_rows:,} 行")
+        del frame
+        gc.collect()
+
+    retained_mb = sum(
+        chunk.nbytes for chunks in parameter_chunks.values() for chunk in chunks
+    ) / (1024 * 1024)
+    logger.info(
+        f"{label} Sheet 合并完成: {len(sources)} 个 Sheet, "
+        f"{total_rows:,} 行, 参数缓存约 {retained_mb:.1f} MB"
+    )
+
+    rows: list[dict] = []
+    for column, chunks in parameter_chunks.items():
+        merged = chunks[0] if len(chunks) == 1 else np.concatenate(chunks)
+        stats = compute_pat_stats(pd.Series(merged, name=column, copy=False))
+        if stats:
+            rows.append(stats)
+        del merged
+    return rows
+
+
+def build_pat(
+    source_dir: str | Path | None = "output/杰群-output",
+    source_files: Iterable[str | Path] | str | Path | None = None,
+) -> pd.DataFrame:
+    """Build PAT from explicit workbooks or a legacy cleaned-result directory.
+
+    Numbered sheets such as ``DC_Data_1`` / ``DC_Data_2`` are read one at a
+    time. Values with the same parameter name are combined before quartiles and
+    control limits are calculated, so the PAT covers the complete workbook.
+    """
+    sheet_sources = _resolve_sheet_sources(source_dir, source_files)
+    rows: list[dict] = []
+
+    for label in DATA_LABELS:
+        sources = sheet_sources[label]
+        if not sources:
+            logger.warning(f"未找到 {label} 清洗结果 Sheet")
+            continue
+        rows.extend(_build_label_rows(label, sources))
 
     if not rows:
         logger.error("未生成任何 PAT 统计行")
@@ -146,7 +286,8 @@ def save_pat(pat_df: pd.DataFrame, output_dir: str = "output/杰群-output") -> 
     """保存 PAT 到 Excel"""
     if pat_df.empty:
         return False
-    output_path = Path(output_dir) / "PAT.xlsx"
+    run_dir = create_output_run_dir(output_dir, ["PAT"])
+    output_path = run_dir / generate_run_filename(run_dir)
     try:
         write_excel_fast(pat_df, output_path, sheet_name='PAT', index=False)
         logger.info(f"PAT 保存成功: {output_path}")
@@ -154,6 +295,15 @@ def save_pat(pat_df: pd.DataFrame, output_dir: str = "output/杰群-output") -> 
     except Exception as e:
         logger.error(f"PAT 保存失败: {e}")
         return False
+
+
+def generate_pat(
+    source_dir: str | Path | None = None,
+    output_dir: str | Path = "output/杰群-output",
+    source_files: Iterable[str | Path] | str | Path | None = None,
+) -> bool:
+    """从显式清洗文件或兼容目录生成 PAT，并保存到独立输出目录。"""
+    return save_pat(build_pat(source_dir=source_dir, source_files=source_files), str(output_dir))
 
 
 if __name__ == "__main__":

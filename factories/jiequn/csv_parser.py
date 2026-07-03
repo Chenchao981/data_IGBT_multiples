@@ -18,6 +18,7 @@
     行 ~36+:   数据行
 """
 
+import csv
 import pandas as pd
 import re
 from pathlib import Path
@@ -118,6 +119,24 @@ def read_header_info(file_path: str, max_scan: int = 40) -> dict:
             info["data_start"] = idx + 1
 
     return info
+
+
+def infer_data_column_count(file_path: str, data_start: int) -> int:
+    """Infer the widest data row for DTA files with variable trailing commas.
+
+    Some Jiequn lines export ``Serial,Bin`` as a two-field header while failed
+    test rows retain a variable number of trailing empty fields.  Using either
+    the Serial header or the first data row therefore underestimates the CSV
+    width and makes pandas reject later rows.  Scan the data section once and
+    use the widest row as the stable parser width.
+    """
+    max_fields = 0
+    with open(file_path, 'r', encoding='utf-8', errors='replace', newline='') as f:
+        for row_idx, row in enumerate(csv.reader(f)):
+            if row_idx < data_start:
+                continue
+            max_fields = max(max_fields, len(row))
+    return max_fields
 
 
 # 参数类型 → 命名规则
@@ -256,6 +275,10 @@ def _build_param_name(param_base: str, rule: str, bias_val: str, unit: str,
                 param_base = "IGSS"
         suffix = bias_val if bias_val else str(seq_counter.get(param_base, 0) + 1)
         seq_counter[param_base] = seq_counter.get(param_base, 0) + 1
+        if param_base.upper() == "IDSS":
+            if unit:
+                return f"{param_base}{suffix}({unit})"
+            return f"{param_base}{suffix}"
         if unit:
             return f"{param_base}{suffix}({unit})"
         return f"{param_base}{suffix}"
@@ -270,6 +293,33 @@ def _build_param_name(param_base: str, rule: str, bias_val: str, unit: str,
         if unit:
             return f"{param_base}({unit})"
         return param_base
+
+
+def _add_duplicate_suffix_before_unit(name: str, suffix_num: int) -> str:
+    match = re.match(r"^(.*?)(\([^()]*\))$", name)
+    if match:
+        return f"{match.group(1)}-{suffix_num}{match.group(2)}"
+    return f"{name}-{suffix_num}"
+
+
+def _dedupe_param_columns(use_cols: List[int], col_names: List[str]) -> Tuple[List[int], List[str]]:
+    """Keep duplicate IDSS bias columns as IDSSx-1/IDSSx-2; drop other duplicates."""
+    name_counts = {}
+    for name in col_names:
+        name_counts[name] = name_counts.get(name, 0) + 1
+
+    emitted = {}
+    final_cols, final_names = [], []
+    for col, name in zip(use_cols, col_names):
+        if name.upper().startswith("IDSS") and name_counts.get(name, 0) > 1:
+            emitted[name] = emitted.get(name, 0) + 1
+            final_cols.append(col)
+            final_names.append(_add_duplicate_suffix_before_unit(name, emitted[name]))
+        elif name not in emitted:
+            emitted[name] = 1
+            final_cols.append(col)
+            final_names.append(name)
+    return final_cols, final_names
 
 
 # ─── 旧的兼容函数（其他模块可能引用） ───
@@ -373,32 +423,29 @@ def parse_dta_csv(file_path: str, target_params: List[str],
     col_names = [n.replace("LCR-RG", "RG") for n in col_names]
 
     # 去重（同名参数可能因 bias 相同而产生）
-    seen = {}
-    final_cols, final_names = [], []
-    for c, n in zip(use_cols, col_names):
-        if n not in seen:
-            seen[n] = True
-            final_cols.append(c)
-            final_names.append(n)
+    final_cols, final_names = _dedupe_param_columns(use_cols, col_names)
 
-    # 用 Serial 行推断总列数（避免第一行数据字段数少导致列数误判）
-    with open(file_path, 'r', encoding='utf-8', errors='replace') as _f:
-        for _i, _line in enumerate(_f):
-            if _i == info["data_start"] - 1:  # Serial 行
-                n_cols = len(_line.strip().split(','))
-                break
-        else:
-            n_cols = 100  # fallback
-
-    raw = pd.read_csv(file_path, skiprows=info["data_start"], header=None,
-                      names=range(n_cols),
-                      low_memory=False, encoding='utf-8')
-
+    # 第三产线的表头和数据区宽度各自可变。表头可能只有 Serial/Bin，
+    # 也可能因末尾多一个逗号而比全部数据行多一列。只用实际数据段
+    # 的最宽行定义 pandas names，避免 expected 26 / found 25。
+    n_cols = infer_data_column_count(file_path, info["data_start"])
     valid = [(c, n) for c, n in zip(final_cols, final_names) if c < n_cols]
     if len(valid) <= 2:
         return pd.DataFrame()
 
-    df = raw.iloc[:, [v[0] for v in valid]].copy()
+    selected_cols = [v[0] for v in valid]
+    raw = pd.read_csv(
+        file_path,
+        skiprows=info["data_start"],
+        header=None,
+        names=range(n_cols),
+        usecols=selected_cols,
+        low_memory=False,
+        encoding='utf-8',
+        encoding_errors='replace',
+    )
+
+    df = raw.loc[:, selected_cols].copy()
     df.columns = [v[1] for v in valid]
 
     # 周记

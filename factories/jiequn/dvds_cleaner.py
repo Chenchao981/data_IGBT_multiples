@@ -14,7 +14,7 @@ from factories.base.base_cleaner import BaseCleaner
 from factories.jiequn.config import TYPE_SUBDIRS, UNIT_CONVERSIONS
 from factories.jiequn.csv_parser import parse_dta_csv
 from factories.jiequn.formatting import BATCH_COL, normalize_output_columns
-from shared.excel_utils import write_excel_fast, generate_lot_based_filename
+from shared.excel_utils import create_output_run_dir, generate_run_filename, write_excel_fast
 
 DVDS_PARAMS = ["DVDS"]
 
@@ -81,8 +81,8 @@ class JiequnDVDSCleaner(BaseCleaner):
             merged = normalize_output_columns(merged, "DVDS")
 
             zhouji_list = merged[BATCH_COL].tolist()
-            filename = generate_lot_based_filename(zhouji_list, "DVDS_JQ")
-            out = self.output_dir / filename
+            run_dir = create_output_run_dir(self.output_dir, zhouji_list)
+            out = run_dir / generate_run_filename(run_dir)
             write_excel_fast(merged, out, sheet_name='DVDS_Data')
 
             logger.info(f"保存: {out} ({len(merged):,} 行)")

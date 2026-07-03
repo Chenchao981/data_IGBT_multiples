@@ -15,12 +15,17 @@ sys.path.append(str(project_root))
 import logging
 import pandas as pd
 from factories.base.base_cleaner import BaseCleaner
-from factories.jiequn.config import UNIT_CONVERSIONS, TYPE_SUBDIRS
+from factories.jiequn.config import (
+    JIEQUN_DC_PARAMS,
+    JIEQUN_DC_SKIP_MATCH_COUNTS,
+    UNIT_CONVERSIONS,
+    TYPE_SUBDIRS,
+)
 from factories.jiequn.csv_parser import parse_dta_csv
 from factories.jiequn.formatting import BATCH_COL, normalize_output_columns
-from shared.excel_utils import write_excel_fast, generate_lot_based_filename
+from shared.excel_utils import create_output_run_dir, generate_run_filename, write_excel_fast
 
-DC_PARAMS = ["VTH", "BVDSS", "IDSS", "ISGS", "RDON", "LRDON", "VF", "VFSD", "VFSDS", "CONT", "ABSDEL", "DELAY"]
+DC_PARAMS = JIEQUN_DC_PARAMS
 
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 logger = logging.getLogger(__name__)
@@ -48,7 +53,25 @@ class JiequnDCCleaner(BaseCleaner):
         direct = base / sub
         if direct.exists():
             return direct
+        # 杰群第三产线：产品目录下直接存放 DC DTA CSV，不设 DC 子目录。
+        flat_dta_files = list(base.rglob("*DTA*.CSV")) + list(base.rglob("*DTA*.csv"))
+        if flat_dta_files:
+            return base
         raise FileNotFoundError(f"未找到 DC 目录: {base}/{sub}")
+
+    @staticmethod
+    def _scan_dc_files(dc_dir: Path) -> list[Path]:
+        """Scan classic DC subdirectories and line-3 flat product folders."""
+        all_csv = sorted(set(
+            list(dc_dir.rglob("*.CSV")) + list(dc_dir.rglob("*.csv"))
+        ))
+        return [
+            path for path in all_csv
+            if "DTA" in path.name.upper()
+            and "_DVDS" not in path.name.upper()
+            and "_RG" not in path.name.upper()
+            and "PAT" not in path.name.upper()
+        ]
 
     def process_all(self, data_type: str = None) -> bool:
         logger.info("=" * 50)
@@ -59,20 +82,17 @@ class JiequnDCCleaner(BaseCleaner):
             dc_dir = self._get_dc_subdir()
             logger.info(f"DC 目录: {dc_dir}")
 
-            csv_files = sorted(set(
-                list(dc_dir.glob("*DTA*.CSV")) + list(dc_dir.glob("*DTA*.csv"))
-            ))
-            if not csv_files:
-                all_csv = sorted(set(list(dc_dir.glob("*.CSV")) + list(dc_dir.glob("*.csv"))))
-                csv_files = [f for f in all_csv
-                           if '_DVDS' not in f.name.upper()
-                           and '_RG' not in f.name.upper()
-                           and 'PAT' not in f.name.upper()]
+            csv_files = self._scan_dc_files(dc_dir)
             logger.info(f"文件: {len(csv_files)} 个")
 
             all_dfs = []
             for f in csv_files:
-                df = parse_dta_csv(str(f), DC_PARAMS, unique_only=False)
+                df = parse_dta_csv(
+                    str(f),
+                    DC_PARAMS,
+                    unique_only=False,
+                    skip_match_counts=JIEQUN_DC_SKIP_MATCH_COUNTS,
+                )
                 if df is not None and not df.empty:
                     all_dfs.append(df)
 
@@ -92,8 +112,8 @@ class JiequnDCCleaner(BaseCleaner):
             merged = normalize_output_columns(merged, "DC")
 
             zhouji_list = merged[BATCH_COL].tolist() if BATCH_COL in merged.columns else ['unknown']
-            filename = generate_lot_based_filename(zhouji_list, "DC_JQ")
-            out = self.output_dir / filename
+            run_dir = create_output_run_dir(self.output_dir, zhouji_list)
+            out = run_dir / generate_run_filename(run_dir)
             write_excel_fast(merged, out, sheet_name='DC_Data')
 
             logger.info(f"保存: {out} ({len(merged):,} 行)")

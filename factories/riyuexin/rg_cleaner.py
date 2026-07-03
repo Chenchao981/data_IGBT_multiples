@@ -15,7 +15,7 @@ import sys
 project_root = Path(__file__).parent.parent.parent
 sys.path.append(str(project_root))
 
-from shared.excel_utils import generate_lot_based_filename, read_excel_fast, write_excel_fast
+from shared.excel_utils import create_output_run_dir, generate_run_filename, read_excel_fast, write_excel_fast
 
 class RGCleaner:
     """RG数据清洗器"""
@@ -263,8 +263,8 @@ class RGCleaner:
         lot_ids = df['lot_ID'].tolist() if 'lot_ID' in df.columns else ['unknown']
         
         # 使用lot_id生成文件名
-        filename = generate_lot_based_filename(lot_ids, "RG")
-        output_file = self.output_dir / filename
+        run_dir = create_output_run_dir(self.output_dir, lot_ids)
+        output_file = run_dir / generate_run_filename(run_dir)
         
         # 保存到Excel文件；超过Excel单sheet行数上限时会自动拆分为多个工作表
         if not write_excel_fast(df, output_file, index=False, engine='xlsxwriter', sheet_name='RG_Data'):

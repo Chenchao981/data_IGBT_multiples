@@ -20,15 +20,13 @@ source_root = os.path.abspath(os.path.join(os.path.dirname(__file__), '..'))
 # 输出的 app.pyz 文件路径
 target_file = os.path.join(os.path.dirname(__file__), 'release', 'ft_data_cleaner.pyz')
 # 打包的入口点
-main_entry_point = 'gui.ft_data_cleaner_gui:main'
+main_entry_point = 'gui.main_window:main'
 # 需要包含在 .pyz 文件中的顶层目录
-packages_to_include = ['dc_processing', 'dvds_processing', 'rg_processing', 'gui']
+packages_to_include = ['gui', 'factories', 'shared']
 # 需要包含在 .pyz 文件中的根目录下的 .py 文件
-files_to_include = [
-    'excel_utils.py',
-]
+files_to_include = []
 
-# 🛡️ 安全设置：需要排除的敏感文件和目录
+# 安全设置：需要排除的敏感文件和目录
 EXCLUDE_PATTERNS = [
     '*.md',           # 所有markdown文档
     '*.MD',           # 大写的markdown文档
@@ -56,7 +54,7 @@ EXCLUDE_PATTERNS = [
 def should_exclude_file(file_path):
     """检查文件是否应该被排除"""
     file_name = os.path.basename(file_path)
-    rel_path = os.path.relpath(file_path, source_root)
+    rel_path = os.path.relpath(file_path, source_root).replace(os.sep, '/')
     
     # 保留requirements.txt
     if file_name == 'requirements.txt':
@@ -64,6 +62,8 @@ def should_exclude_file(file_path):
     
     # 检查排除模式
     for pattern in EXCLUDE_PATTERNS:
+        if pattern.endswith('/') and pattern.rstrip('/') in rel_path.split('/'):
+            return True
         if '*' in pattern:
             if fnmatch.fnmatch(file_name, pattern) or fnmatch.fnmatch(rel_path, pattern):
                 return True
@@ -89,7 +89,7 @@ def copy_directory_filtered(src, dst):
             
             if should_exclude_file(src_file):
                 excluded_count += 1
-                print(f"  ❌ 排除敏感文件: {os.path.relpath(src_file, src)}")
+                print(f"  [排除] 敏感文件: {os.path.relpath(src_file, src)}")
                 continue
             
             # 计算目标路径
@@ -133,11 +133,11 @@ def create_secure_archive():
         src_path = os.path.join(source_root, package_name)
         if os.path.isdir(src_path):
             dest_path = os.path.join(temp_source_dir, package_name)
-            print(f"🔍 正在过滤并拷贝 {package_name}...")
+            print(f"正在过滤并拷贝 {package_name}...")
             included, excluded = copy_directory_filtered(src_path, dest_path)
             total_included += included
             total_excluded += excluded
-            print(f"  ✅ {package_name}: 包含 {included} 个文件，排除 {excluded} 个敏感文件")
+            print(f"  [完成] {package_name}: 包含 {included} 个文件，排除 {excluded} 个敏感文件")
         else:
             print(f"警告: 找不到目录 {package_name}，跳过。")
             
@@ -146,13 +146,13 @@ def create_secure_archive():
         src_path = os.path.join(source_root, file_name)
         if os.path.isfile(src_path):
             if should_exclude_file(src_path):
-                print(f"  ❌ 排除敏感文件: {file_name}")
+                print(f"  [排除] 敏感文件: {file_name}")
                 total_excluded += 1
                 continue
             
             dest_path = os.path.join(temp_source_dir, file_name)
             shutil.copy2(src_path, dest_path)
-            print(f"  ✅ 已拷贝 {file_name}")
+            print(f"  [完成] 已拷贝 {file_name}")
             total_included += 1
         else:
             print(f"警告: 找不到文件 {file_name}，跳过。")
@@ -162,12 +162,12 @@ def create_secure_archive():
     if os.path.isfile(requirements_src):
         requirements_dest = os.path.join(temp_source_dir, 'requirements.txt')
         shutil.copy2(requirements_src, requirements_dest)
-        print(f"  ✅ 已拷贝 requirements.txt")
+        print(f"  [完成] 已拷贝 requirements.txt")
         total_included += 1
 
     # --- 创建 .pyz 文件 ---
-    print(f"\n🔒 正在创建安全的压缩包...")
-    print(f"📊 统计: 包含 {total_included} 个文件，排除 {total_excluded} 个敏感文件")
+    print(f"\n正在创建安全的压缩包...")
+    print(f"统计: 包含 {total_included} 个文件，排除 {total_excluded} 个敏感文件")
     
     zipapp.create_archive(
         source=temp_source_dir,
@@ -176,16 +176,16 @@ def create_secure_archive():
         main=main_entry_point,
         compressed=True
     )
-    print(f"🎉 成功创建安全版本: {target_file}")
+    print(f"成功创建安全版本: {target_file}")
 
     # 显示文件大小
     if os.path.exists(target_file):
         file_size = os.path.getsize(target_file)
-        print(f"📁 文件大小: {file_size:,} bytes ({file_size / (1024*1024):.2f} MB)")
+        print(f"文件大小: {file_size:,} bytes ({file_size / (1024*1024):.2f} MB)")
 
     # --- 清理临时目录 ---
     shutil.rmtree(temp_source_dir)
-    print(f"🧹 已删除临时目录: {temp_source_dir}")
+    print(f"已删除临时目录: {temp_source_dir}")
 
 def create_usage_instructions():
     """创建使用说明文件"""
@@ -194,35 +194,38 @@ def create_usage_instructions():
     usage_content = """FT数据清洗工具 - 使用说明
 
 运行方式：
-1. 确保系统已安装Python 3.9或更高版本
+1. 确保系统已安装Python 3.10或更高版本
 2. 安装依赖：python -m pip install -r requirements.txt
 3. 运行程序：python ft_data_cleaner.pyz
 
 程序功能：
-- DC数据清洗：处理DC测试数据
-- DVDS数据清洗：处理DVDS测试数据  
-- RG数据清洗：处理RG测试数据
+- 日月新（ASE）：DC、DVDS、RG、PAT、SYL&SBL
+- 杰群（Jiequn）：DC、DC-3、DVDS、RG、统一CSV、PAT、SYL&SBL
+- 电基（Dianji）：SYL&SBL
 
 注意事项：
 - 请确保输入数据格式正确
+- 杰群 DC-3 请选择第三产线 DC1 根目录或产品目录
+- PAT 可选择一个或多个 DC/DVDS/RG 清洗结果 Excel 文件；编号 Sheet 会自动合并
+- SYL&SBL 请选择单个 .xls 或 .xlsx 良率文件
 - 输出文件将保存在指定的输出目录
 - 如遇问题请查看程序日志信息
 
-版本：1.2
+版本：2.2.0
 作者：cc
 """
     
     with open(usage_file, 'w', encoding='utf-8') as f:
         f.write(usage_content)
     
-    print(f"📝 已创建使用说明: {usage_file}")
+    print(f"已创建使用说明: {usage_file}")
 
 if __name__ == '__main__':
-    print("🛡️  开始创建FT数据清洗工具安全版本...")
+    print("开始创建FT数据清洗工具安全版本...")
     print("=" * 60)
     create_secure_archive()
     create_usage_instructions()
     print("=" * 60)
-    print("🎯 安全打包完成！")
-    print("💡 提示: 当前版本已移除敏感文档，可安全发布")
-    print(f"📦 输出文件: {target_file}") 
+    print("安全打包完成！")
+    print("提示: 当前版本已移除敏感文档，可安全发布")
+    print(f"输出文件: {target_file}")

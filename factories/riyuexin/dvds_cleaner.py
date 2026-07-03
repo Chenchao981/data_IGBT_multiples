@@ -19,7 +19,7 @@ from pathlib import Path
 project_root = Path(__file__).parent.parent.parent
 sys.path.append(str(project_root))
 
-from shared.excel_utils import generate_lot_based_filename, read_excel_fast, write_excel_fast
+from shared.excel_utils import create_output_run_dir, generate_run_filename, read_excel_fast, write_excel_fast
 
 # 配置日志
 logging.basicConfig(
@@ -325,8 +325,8 @@ class DVDSCleaner:
             lot_ids = df['lot_ID'].tolist() if 'lot_ID' in df.columns else ['unknown']
             
             # 使用lot_id生成文件名
-            filename = generate_lot_based_filename(lot_ids, "DVDS")
-            filepath = os.path.join(self.output_dir, filename)
+            run_dir = create_output_run_dir(self.output_dir, lot_ids)
+            filepath = str(run_dir / generate_run_filename(run_dir))
             
             # 保存到Excel - 使用xlsxwriter引擎提升写入速度
             if not write_excel_fast(df, filepath, index=False, engine='xlsxwriter', sheet_name='DVDS_Data'):

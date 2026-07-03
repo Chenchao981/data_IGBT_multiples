@@ -56,7 +56,7 @@ def sort_param_columns(columns: Iterable[str], data_type: str) -> list[str]:
     def key(col: str):
         base = _param_base(col)
         group = PARAM_ORDER_GROUPS.get(base, base)
-        nums = tuple(int(n) for n in re.findall(r"-?\d+", col))
+        nums = tuple(float(n) for n in re.findall(r"\d+(?:\.\d+)?", col))
         gate_rank = 0 if base == "ISGS" else 1 if base == "IGSS" else 0
         return (order.get(group, len(order)), nums, gate_rank, col)
 
