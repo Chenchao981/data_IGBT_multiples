@@ -1,22 +1,22 @@
-FT数据清洗工具 - 使用说明
+FT Data Cleaner - Usage Instructions
 
-运行方式：
-1. 确保系统已安装Python 3.10或更高版本
-2. 安装依赖：python -m pip install -r requirements.txt
-3. 运行程序：python ft_data_cleaner.pyz
+Run:
+1. Ensure Python 3.10 or later is installed.
+2. Install dependencies: python -m pip install -r requirements.txt
+3. Start the application: python ft_data_cleaner.pyz
 
-程序功能：
-- 日月新（ASE）：DC、DVDS、RG、PAT、SYL&SBL
-- 杰群（Jiequn）：DC、DC-3、DVDS、RG、统一CSV、PAT、SYL&SBL
-- 电基（Dianji）：SYL&SBL
+Features:
+- ASE: DC, DVDS, RG, PAT, and SYL&SBL
+- Jiequn: DC, DC-3, DVDS, RG, unified CSV, PAT, and SYL&SBL
+- Dianji: SYL&SBL
 
-注意事项：
-- 请确保输入数据格式正确
-- 杰群 DC-3 请选择第三产线 DC1 根目录或产品目录
-- PAT 可选择一个或多个 DC/DVDS/RG 清洗结果 Excel 文件；编号 Sheet 会自动合并
-- SYL&SBL 请选择单个 .xls 或 .xlsx 良率文件
-- 输出文件将保存在指定的输出目录
-- 如遇问题请查看程序日志信息
+Notes:
+- Verify that the selected input uses the expected factory format.
+- For Jiequn DC-3, select the third-line DC1 root or a product directory.
+- PAT accepts one or more cleaned DC/DVDS/RG Excel files and merges numbered sheets.
+- SYL&SBL accepts one .xls or .xlsx yield workbook.
+- Output files are saved under the selected output directory.
+- Review the application log if processing fails.
 
-版本：2.2.0
-作者：cc
+Version: 2.2.1
+Author: cc

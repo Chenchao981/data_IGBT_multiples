@@ -108,6 +108,47 @@ class DCDataCleaner:
             logger.error(f"提取第{row_index + 1}行测试条件时出错: {str(e)}")
             return None
 
+    def identify_hrdon_alias_columns(
+        self, df: pd.DataFrame, test_params: List[Tuple[int, str]]
+    ) -> set:
+        """识别被新版ASE源文件误标为RDON的高栅压HRDON列。
+
+        旧版文件使用 ``HRDON + RDON``，新版文件将两列都写成
+        ``RDON + RDON``。当源文件没有显式HRDON且存在多个RDON时，
+        按第6行的VG/VGS测试条件识别：栅压最高的列视为HRDON。
+        """
+        rdon_columns = [
+            col for col, param in test_params if param.strip().upper() == 'RDON'
+        ]
+        has_explicit_hrdon = any(
+            param.strip().upper() == 'HRDON' for _, param in test_params
+        )
+        if has_explicit_hrdon or len(rdon_columns) < 2:
+            return set()
+
+        gate_voltages = []
+        for col in rdon_columns:
+            value = self.extract_test_condition_value(df, col, row_index=5)
+            if value is not None:
+                gate_voltages.append((col, float(value)))
+
+        if len(gate_voltages) < 2:
+            logger.warning("重复RDON列缺少可比较的VG/VGS测试条件，保留原命名")
+            return set()
+
+        max_voltage = max(value for _, value in gate_voltages)
+        min_voltage = min(value for _, value in gate_voltages)
+        if max_voltage == min_voltage:
+            logger.warning("重复RDON列的VG/VGS测试条件相同，保留原命名")
+            return set()
+
+        alias_columns = {col for col, value in gate_voltages if value == max_voltage}
+        logger.info(
+            f"检测到ASE新版重复RDON表头，将高栅压列 {sorted(alias_columns)} "
+            f"统一为HRDON (VG/VGS={max_voltage:g}V)"
+        )
+        return alias_columns
+
     def extract_dc_data(self, file_path: Path) -> Optional[pd.DataFrame]:
         """
         从单个xlsx文件中高效提取DC测试数据（向量化版本）
@@ -153,6 +194,9 @@ class DCDataCleaner:
                     test_params.append((i, param_name))
             
             logger.debug(f"找到 {len(test_params)} 个测试参数")
+
+            # ASE新版导出将HRDON误标为RDON，需在重复列编号前先恢复语义名。
+            hrdon_alias_columns = self.identify_hrdon_alias_columns(df, test_params)
             
             # 3. 获取第6行的单位信息
             row6 = df.iloc[6]
@@ -167,7 +211,9 @@ class DCDataCleaner:
                 unit_name = str(unit_val).strip() if not pd.isna(unit_val) and str(unit_val).strip() else None
                 
                 enhanced_param = param
-                if param.upper() in ['IDSS', 'ISGS']:
+                if param.upper() == 'RDON' and col in hrdon_alias_columns:
+                    enhanced_param = 'HRDON'
+                elif param.upper() in ['IDSS', 'ISGS']:
                     test_condition = self.extract_test_condition_value(df, col, row_index=4)
                     if test_condition:
                         enhanced_param = f"{param}{test_condition}"
