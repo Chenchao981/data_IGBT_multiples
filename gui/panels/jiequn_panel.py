@@ -15,7 +15,7 @@ from factories.jiequn.config import FACTORY_NAME
 
 class JiequnPanel(BasePanel):
     factory_name = FACTORY_NAME
-    data_types = ["DC", "DC-3", "DVDS", "RG", "统一CSV"]
+    data_types = ["DC-AI", "DC-1", "DC-统一CSV", "DC-3", "DVDS", "RG"]
     pat_analysis_types = ["PAT"]
     yield_analysis_types = ["SYL&SBL"]
     default_input = str(Path.home() / "Desktop")
@@ -29,7 +29,14 @@ class JiequnPanel(BasePanel):
         inp = self.input_edit.text().strip()
         out = self.output_edit.text().strip()
 
-        if data_type in {"DC", "DC-3"}:
+        if data_type == "DC-AI":
+            from factories.jiequn.dc_auto import run_auto_dc
+            return lambda: self._require_success(
+                "DC-AI",
+                run_auto_dc(input_dir=inp, output_dir=out),
+            )
+
+        if data_type in {"DC", "DC-1", "DC-3"}:
             from factories.jiequn.dc_cleaner import JiequnDCCleaner
             return lambda: self._require_success(
                 data_type,
@@ -44,9 +51,9 @@ class JiequnPanel(BasePanel):
             from factories.jiequn.rg_cleaner import JiequnRGCleaner
             return lambda: self._require_success("RG", JiequnRGCleaner(input_dir=inp, output_dir=out).process_all())
 
-        elif data_type == "统一CSV":
+        elif data_type in {"统一CSV", "DC-统一CSV"}:
             from factories.jiequn.clean_unified import run
-            return lambda: self._require_success("统一CSV", run(input_dir=inp, output_dir=out))
+            return lambda: self._require_success(data_type, run(input_dir=inp, output_dir=out))
 
         elif data_type == "PAT":
             from factories.jiequn.pat_cleaner import generate_pat
@@ -63,11 +70,25 @@ class JiequnPanel(BasePanel):
 
         return lambda: False
 
+    def _apply_operation_ui(self, data_type: str):
+        super()._apply_operation_ui(data_type)
+        if data_type == "DC-AI" and hasattr(self, "input_edit"):
+            self.input_label.setText("杰群 DC 数据文件夹:")
+            self.input_edit.setPlaceholderText(
+                "选择单一格式的 DC-1、DC-统一CSV 或 DC-3 数据目录..."
+            )
+
+    def _action_text_for(self, data_type: str) -> str:
+        if data_type == "DC-AI":
+            return "自动识别并清洗"
+        return super()._action_text_for(data_type)
+
     def _require_success(self, label: str, result: bool) -> bool:
         if result:
             return True
         raise RuntimeError(
             f"杰群 {label} 处理没有生成有效结果。请确认输入目录是否选对："
-            "DC/DVDS/RG 使用杰群格式1目录；第三产线 DC 可选择 DC1 根目录或产品目录；"
+            "DC-AI 一次只能选择一种杰群 DC 格式；DC-1/DVDS/RG 使用分类型目录；"
+            "DC-统一CSV 选择 RAW 目录；DC-3 可选择第三产线根目录或产品目录；"
             "PAT 选择一个或多个清洗结果 Excel 文件；SYL&SBL 使用单个良率 Excel 文件。"
         )

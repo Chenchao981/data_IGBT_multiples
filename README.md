@@ -12,6 +12,7 @@
 | **杰群 批次1** | .csv 分目录 | DC / DVDS / RG | ✅ 稳定 |
 | **杰群 批次2** | .csv 统一CSV | DC+DVDS+RG 合并 | ✅ 稳定 |
 | **杰群 第三产线** | .csv 产品目录平铺、可变尾空列 | DC | ✅ 可用 |
+| **杰群 DC-AI** | 自动识别上述三种目录/头部特征 | 自动分发清洗 | ✅ 推荐入口 |
 | 杰群 PAT | — | 统计汇总 | ✅ 可用 |
 
 ---
@@ -34,6 +35,7 @@ data_IGBT_multiple/
 │   └── jiequn/                     ← 杰群模块
 │       ├── config.py               ← 配置 + 单位换算规则
 │       ├── csv_parser.py           ← ★ CSR 解析器（通用）
+│       ├── dc_auto.py              ← ★ DC-AI 格式识别 + 清洗分发
 │       ├── formatting.py           ← ★ 杰群输出列名/参数排序规则
 │       ├── dc_cleaner.py           ← 分目录 → DC
 │       ├── dvds_cleaner.py         ← 分目录 → DVDS
@@ -51,7 +53,7 @@ data_IGBT_multiple/
 │   └── panels/
 │       ├── base_panel.py           ← 面板基类（文件夹选 / 按钮 / 日志）
 │       ├── riyuexin_panel.py       ← 日月新: 3 按钮
-│       └── jiequn_panel.py         ← 杰群: 4 个清洗入口 + 清洗后统计
+│       └── jiequn_panel.py         ← 杰群: DC-AI + 手工入口 + 清洗后统计
 │
 ├── data/                           ← 原始数据
 │   ├── 杰群/                       ← 批次1: 分目录 (DC/DVDS/RG)
@@ -78,11 +80,16 @@ python gui/main_window.py
 
 | 按钮 | 处理的数据格式 | 输入目录示例 | 输出 |
 |------|---------------|-------------|------|
-| **DC** | 分目录（data/杰群/.../DC/） | 指向 `data/杰群` | NUM + 批次 + DC参数 |
+| **DC-AI** | 自动判断 DC-1 / DC-统一CSV / DC-3 | 指向任一单一格式目录 | 自动调用对应清洗器 |
+| **DC-1** | 分目录（data/杰群/.../DC/） | 指向 `data/杰群` 或 `DC` 目录 | NUM + 批次 + DC参数 |
+| **DC-统一CSV** | 单个CSV含 DC+DVDS+RG | 指向 `data/杰群2/RAW` | DC.xlsx + DVDS.xlsx + RG.xlsx |
 | **DC-3** | 第三产线产品目录平铺 DTA CSV | 指向 `data/DC1` 或产品目录 | NUM + 批次 + DC参数 |
 | **DVDS** | 分目录（data/杰群/.../DVDS/） | 指向 `data/杰群` | NUM + 批次 + DVDS(mV) |
 | **RG** | 分目录（data/杰群/.../RG/） | 指向 `data/杰群` | NUM + 批次 + RG(R) |
-| **统一CSV** | 单个CSV含全部参数（data/杰群2/RAW/） | 指向 `data/杰群2/RAW` | DC.xlsx + DVDS.xlsx + RG.xlsx |
+
+`DC-AI` 只读取目录结构和每个 DTA CSV 前40行内的 `Item` 头部，不读取测试数据行。
+若同一目录混有两种 DC 格式，或统一CSV只出现 DVDS 而缺少 `LCR-RG`，程序会停止并
+提示重新选择目录，不会猜测后继续清洗。详细规则见 `docs/杰群DC-AI自动识别说明.md`。
 
 第二行是清洗后统计/分析方法：
 
@@ -298,6 +305,9 @@ python factories/jiequn/clean_unified.py data/杰群2/RAW output/杰群2
 # 杰群 第三产线 DC
 python -c "from factories.jiequn.dc_cleaner import JiequnDCCleaner; JiequnDCCleaner('data/DC1', 'output/DC1').process_all()"
 
+# 杰群 DC-AI（自动判断 DC-1 / DC-统一CSV / DC-3）
+python factories/jiequn/dc_auto.py <输入目录> <输出目录>
+
 # PAT 统计
 python -c "from factories.jiequn.pat_cleaner import build_pat, save_pat; save_pat(build_pat('output/杰群-output'))"
 
@@ -326,6 +336,7 @@ python gui/main_window.py
 
 ## 🔄 版本历史
 
+- **v2.5.0** (2026-07-14)：新增杰群 `DC-AI` 默认入口；按 `DC` 子目录、DTA `Item` 中的 DC/DVDS/LCR-RG 特征自动判断 DC-1、DC-统一CSV、DC-3，并拒绝混合或不完整格式目录。
 - **v2.4.1** (2026-07-14)：修复杰群 DC-3/共用 DTA 解析器在多个 RDON 测试具有相同 Bias 1 条件时误删后续列；按源顺序输出 `RDON20-1(mR)`、`RDON20-2(mR)` 等唯一列名。
 - **v2.4** (2026-07-03)：PAT 支持显式选择一个或多个清洗 Excel；逐个读取并合并 `DC_Data_1/2/3` 等编号 Sheet，Calamine 优先，确保整本工作簿数据参与统一四分位数计算。
 - **v2.3.2** (2026-07-03)：修复 DC 清洗误跳过首个有效 IDSS；现在保留全部 IDSS，第三产线输出新增 `IDSS-40(nA)`。
@@ -596,6 +607,15 @@ _PARAM_UNITS = {
   - 文件 glob: `*RG*.CSV`。
   - 不需要单位换算。
 
+### `factories/jiequn/dc_auto.py` (DC-AI)
+
+- `detect_dc_format(input_dir)`：只读取目录结构和 DTA `Item` 头部，返回格式、实际清洗目录、文件列表及识别依据。
+- `DC-1`：路径中存在名称严格等于 `DC` 的分类型目录。
+- `DC-统一CSV`：平铺 DTA 的 `Item` 同时包含 DC 参数、`DVDS*` 与 `LCR-RG`。
+- `DC-3`：没有 `DC` 分类型目录，`Item` 有 DC 参数且没有 `DVDS*`。
+- `run_auto_dc(input_dir, output_dir)`：识别后分别调用 `JiequnDCCleaner` 或 `clean_unified.run`。
+- 同一选择目录混入多个格式、缺少 Item、没有 DC 参数或统一CSV签名不完整时抛出可读错误，不执行清洗。
+
 ### `factories/jiequn/clean_unified.py` (杰群批次2)
 
 模块级 `run(input_dir, output_dir)` 函数（非类）：
@@ -685,11 +705,12 @@ Sigma, LCL\n计算值, UCL\n计算值, LCL\n更新前, UCL\n更新前, LCL\n更�
 **`panels/riyuexin_panel.py`：** 3 按钮（DC / DVDS / RG），默认路径 `~/Desktop`。
 - DVDS 通过 monkey-patch 调整 `c.dvds_dir` / `c.output_dir`（因为 `DVDSCleaner` 内部用 `base_dir` 派生路径）。
 
-**`panels/jiequn_panel.py`：** 第一行包含 DC / DC-3 / DVDS / RG / 统一CSV 清洗入口，第二行是 PAT 参数分析，第三行是 SYL&SBL 良率分析。
+**`panels/jiequn_panel.py`：** 第一行包含 DC-AI / DC-1 / DC-统一CSV / DC-3 / DVDS / RG 清洗入口，第二行是 PAT 参数分析，第三行是 SYL&SBL 良率分析。
 - 输入/输出默认路径与日月新一致，启动后都指向用户桌面。
-- "统一CSV" 调 `clean_unified.run(inp, out)`。
+- `DC-AI` 为默认选择，调用 `dc_auto.run_auto_dc(inp, out)`；三个手工 DC 入口继续保留。
+- `DC-统一CSV` 调 `clean_unified.run(inp, out)`。
 - "PAT" 可显式多选一个或多个清洗 Excel；同一文件内的 `DC_Data_1/2/3` 等编号 Sheet 会逐个读取并按参数合并。
-- 用户选择 DC/DVDS/RG/统一CSV/PAT 时不会覆盖手动选择的桌面或业务目录；历史样例路径仅作为代码中的备用常量保留。
+- 用户切换 DC-AI、各手工清洗入口或 PAT 时会分别记忆路径，不会覆盖已选择的桌面或业务目录。
 
 ---
 
@@ -790,15 +811,6 @@ Sigma, LCL\n计算值, UCL\n计算值, LCL\n更新前, UCL\n更新前, LCL\n更�
 
 - 改 `pat_cleaner.py:compute_pat_stats()`，在 `PAT_HEADERS` 和返回 dict 中同步加列。
 
-### ⚠️ 已知过时的扩展点
-
-- `packaging/build_secure_pyz.py` 当前配置：
-  - 入口点：`gui.ft_data_cleaner_gui:main`（**该文件已不存在**）
-  - 打包列表：`['dc_processing', 'dvds_processing', 'rg_processing', 'gui']`（前 3 个旧模块已删除）
-  - **需更新为**：`gui.main_window:main` 和 `['factories', 'shared', 'gui']`。
-
----
-
 ## ⚠️ Quirks & Gotchas（迭代前必读）
 
 1. **两个并行的统一CSV实现**：`clean_unified.py`（GUI/CLI 实际使用）和 `unified_cleaner.py`（带 logger 的备选）。`_apply_conv` 逻辑被重复实现。
@@ -811,9 +823,9 @@ Sigma, LCL\n计算值, UCL\n计算值, LCL\n更新前, UCL\n更新前, LCL\n更�
 8. **PAT 用 glob + mtime 取最新**：仅分析**最新**的 `mixed_*_JQ_*.xlsx`，同时存在两个批次时只分析新的。
 9. **ASE RG 健全性过滤**：`0 < RG < 1000` 硬编码，对某些器件家族可能误删。
 10. **`process_all_dc_files` 返回类型不对称**：返回 `bool` 但 `None` 也视为失败；`RGCleaner.run()` 可返回 `None` 或 path。
-11. **Jiequn panel 不自动检测批次**：用户需手动指向 `data/杰群` 或 `data/杰群2/RAW`。
-12. **`gui/README.md` 引用了不存在的 `ft_data_cleaner_gui.py`**：实际模块是 `gui/main_window.py`。
-13. **`packaging/build_secure_pyz.py` 配置陈旧**：见上方"已知过时的扩展点"。
+11. **DC-AI 不接受多格式总目录**：若选择目录同时含 DC-1、统一CSV或 DC-3，程序会拒绝；应选择单一格式的下级目录。
+12. **统一CSV自动分发仍要求同一 RAW 目录**：多个子目录中的统一CSV不会被隐式合并，以免跨批次误清洗。
+13. **发布入口**：`packaging/build_secure_pyz.py` 使用 `gui.main_window:main` 并打包 `gui/factories/shared`。
 14. **DVDS 单位读取**：从 row 6 读单位。如果文件是 `V` 而非 `mV`，列名是 `DVDS(V)` 但值**不自动换算**——Jiequn 靠 `BaseCleaner._apply_unit_conversions` 补 V→mV；ASE 直接信任源文件单位。
 15. **Excel 列数从 `Serial` 行推断**：避免首数据行字段少时误判列数。
 16. **性能优化报告**：DC 968→1916 rows/s（+98%），DVDS 8960 rows/s，RG 8494 rows/s（calamine 引擎切换后）。
@@ -831,6 +843,7 @@ Sigma, LCL\n计算值, UCL\n计算值, LCL\n更新前, UCL\n更新前, LCL\n更�
 | `factories/jiequn/csv_parser.py` | `extract_zhouji` | 文件名 → 周记 |
 | `factories/jiequn/csv_parser.py` | `_item_matches_param` | Item 精确/别名匹配，避免短名误匹配 |
 | `factories/jiequn/csv_parser.py` | `_build_param_name` | 构建增强参数名（seq/bias/unit） |
+| `factories/jiequn/dc_auto.py` | `detect_dc_format`, `run_auto_dc` | DC-1 / DC-统一CSV / DC-3 自动识别与分发 |
 | `factories/jiequn/formatting.py` | `normalize_output_columns`, `sort_param_columns` | 杰群输出列名和参数排序统一入口 |
 | `factories/jiequn/dc_cleaner.py` | `JiequnDCCleaner` | DC cleaner (批次1) |
 | `factories/jiequn/dvds_cleaner.py` | `JiequnDVDSCleaner` | DVDS cleaner (批次1) |
@@ -851,10 +864,10 @@ Sigma, LCL\n计算值, UCL\n计算值, LCL\n更新前, UCL\n更新前, LCL\n更�
 | `gui/main_window.py` | `MainWindow`, `FACTORIES` | 侧边栏 + 堆叠切换器 |
 | `gui/panels/base_panel.py` | `BasePanel`, `CleanerWorker` | UI 外壳 + QThread |
 | `gui/panels/riyuexin_panel.py` | `RiyuexinPanel` | 3 按钮（DC/DVDS/RG） |
-| `gui/panels/jiequn_panel.py` | `JiequnPanel` | 4 个清洗入口 + PAT 清洗后统计 |
-| `packaging/build_secure_pyz.py` | `create_secure_archive` | ⚠️ 配置陈旧，需更新 |
+| `gui/panels/jiequn_panel.py` | `JiequnPanel` | DC-AI + 5个手工清洗入口 + PAT/SYL&SBL |
+| `packaging/build_secure_pyz.py` | `create_secure_archive` | 安全构建 `gui.main_window:main` 发布包 |
 
 ---
 
 **开发者**: cc  
-**最后更新**: 2026-06-03
+**最后更新**: 2026-07-14
