@@ -303,7 +303,15 @@ def _add_duplicate_suffix_before_unit(name: str, suffix_num: int) -> str:
 
 
 def _dedupe_param_columns(use_cols: List[int], col_names: List[str]) -> Tuple[List[int], List[str]]:
-    """Keep duplicate IDSS bias columns as IDSSx-1/IDSSx-2; drop other duplicates."""
+    """Keep repeated test columns and make their output names unique.
+
+    A repeated IDSS/RDON enhanced name does not mean the source column is
+    redundant.  For example, Jiequn can export two ``RDON`` tests with the same
+    Bias 1 value but different Bias 2 (VGS) conditions.  Both tests must survive
+    parsing, so use deterministic source-order suffixes just as the existing
+    IDSS handling did.  Preserve the historical duplicate handling for other
+    parameters to keep this compatibility fix narrowly scoped.
+    """
     name_counts = {}
     for name in col_names:
         name_counts[name] = name_counts.get(name, 0) + 1
@@ -311,7 +319,8 @@ def _dedupe_param_columns(use_cols: List[int], col_names: List[str]) -> Tuple[Li
     emitted = {}
     final_cols, final_names = [], []
     for col, name in zip(use_cols, col_names):
-        if name.upper().startswith("IDSS") and name_counts.get(name, 0) > 1:
+        keep_repeated = name.upper().startswith(("IDSS", "RDON"))
+        if keep_repeated and name_counts.get(name, 0) > 1:
             emitted[name] = emitted.get(name, 0) + 1
             final_cols.append(col)
             final_names.append(_add_duplicate_suffix_before_unit(name, emitted[name]))

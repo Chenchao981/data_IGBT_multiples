@@ -14,7 +14,7 @@ import glob
 import fnmatch
 from pathlib import Path
 
-VERSION = '2.2.1'
+VERSION = '2.4.1'
 
 # --- Configuration ---
 # Project root

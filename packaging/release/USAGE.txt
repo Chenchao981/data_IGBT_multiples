@@ -18,5 +18,5 @@ Notes:
 - Output files are saved under the selected output directory.
 - Review the application log if processing fails.
 
-Version: 2.2.1
+Version: 2.4.1
 Author: cc
