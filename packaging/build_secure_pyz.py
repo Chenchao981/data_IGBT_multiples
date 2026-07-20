@@ -14,7 +14,7 @@ import glob
 import fnmatch
 from pathlib import Path
 
-VERSION = '2.5.0'
+VERSION = '2.6.0'
 
 # --- Configuration ---
 # Project root
@@ -203,12 +203,13 @@ Run:
 Features:
 - ASE: DC, DVDS, RG, PAT, and SYL&SBL
 - Jiequn: DC-AI, DC-1, DC-unified, DC-3, DVDS, RG, PAT, and SYL&SBL
-- Dianji: SYL&SBL
+- Dianji: FT-ALL cleaning and SYL&SBL
 
 Notes:
 - Jiequn DC-AI is the recommended default and detects one DC format per selected directory.
 - Mixed DC-1, DC-unified, and DC-3 directories are rejected instead of guessed.
 - For Jiequn DC-3, select the third-line DC1 root or a product directory.
+- Dianji FT-ALL accepts a directory of PowerTECH tab-delimited text files with .xls suffixes.
 - PAT accepts one or more cleaned DC/DVDS/RG Excel files and merges numbered sheets.
 - SYL&SBL accepts one .xls or .xlsx yield workbook.
 - Output files are saved under the selected output directory.

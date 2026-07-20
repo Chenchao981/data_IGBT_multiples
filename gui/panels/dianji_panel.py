@@ -10,12 +10,12 @@ project_root = Path(__file__).resolve().parent.parent.parent
 sys.path.append(str(project_root))
 
 from gui.panels.base_panel import BasePanel
-from factories.dianji.config import FACTORY_NAME
+from factories.dianji.config import DATA_TYPES, FACTORY_NAME
 
 
 class DianjiPanel(BasePanel):
     factory_name = FACTORY_NAME
-    data_types = []
+    data_types = DATA_TYPES
     yield_analysis_types = ["SYL&SBL"]
     default_input = str(Path.home() / "Desktop")
     default_output = str(Path.home() / "Desktop")
@@ -28,6 +28,13 @@ class DianjiPanel(BasePanel):
         inp = self.input_edit.text().strip()
         out = self.output_edit.text().strip()
 
+        if data_type == "FT-ALL":
+            from factories.dianji.dc_cleaner import DianjiDCCleaner
+
+            return lambda: self._require_success(
+                "FT-ALL", DianjiDCCleaner(inp, out).process_all()
+            )
+
         if data_type == "SYL&SBL":
             from factories.dianji.yield_report import generate_report
             return lambda: self._require_success(
@@ -39,4 +46,6 @@ class DianjiPanel(BasePanel):
     def _require_success(self, label: str, result: bool) -> bool:
         if result:
             return True
-        raise RuntimeError(f"电基 {label} 处理没有生成有效结果。请确认良率 Excel 文件和输出目录是否选择正确。")
+        raise RuntimeError(
+            f"电基 {label} 处理没有生成有效结果。请确认输入文件/目录和输出目录是否选择正确。"
+        )
