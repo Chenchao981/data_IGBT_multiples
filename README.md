@@ -13,7 +13,7 @@
 | **杰群 批次2** | .csv 统一CSV | DC+DVDS+RG 合并 | ✅ 稳定 |
 | **杰群 第三产线** | .csv 产品目录平铺、可变尾空列 | DC | ✅ 可用 |
 | **杰群 DC-AI** | 自动识别上述三种目录/头部特征 | 自动分发清洗 | ✅ 推荐入口 |
-| 杰群 PAT | — | 统计汇总 | ✅ 可用 |
+| PAT 参数分析 | 已清洗 Excel | 日月新 / 杰群 / 电基统计汇总 | ✅ 可用 |
 | **电基 (Dianji)** | PowerTECH Tab 文本（伪 `.xls`） | FT-ALL 合并清洗 | ✅ 可用 |
 
 ---
@@ -49,6 +49,7 @@ data_IGBT_multiple/
 │       ├── config.py               ← PowerTECH 布局、单位和输出顺序
 │       ├── powertech_parser.py     ← 伪 .xls 文本解析 + 严格校验
 │       ├── dc_cleaner.py           ← FT-ALL 合并清洗 → RAW
+│       ├── pat_cleaner.py          ← RAW 参数 PAT 统计
 │       └── yield_report.py         ← SYL&SBL 良率分析
 │
 ├── shared/
@@ -61,7 +62,7 @@ data_IGBT_multiple/
 │       ├── base_panel.py           ← 面板基类（文件夹选 / 按钮 / 日志）
 │       ├── riyuexin_panel.py       ← 日月新: 3 按钮
 │       ├── jiequn_panel.py         ← 杰群: DC-AI + 手工入口 + 清洗后统计
-│       └── dianji_panel.py         ← 电基: FT-ALL + SYL&SBL
+│       └── dianji_panel.py         ← 电基: FT-ALL + PAT + SYL&SBL
 │
 ├── data/                           ← 原始数据
 │   ├── 杰群/                       ← 批次1: 分目录 (DC/DVDS/RG)
@@ -256,6 +257,8 @@ UCL = 中位数 + 6 * Sigma
 ```
 
 输出：`PAT.xlsx`，含每个参数的 count/mean/std/min/Q1/median/Q3/max/Sigma/LCL/UCL。
+日月新与杰群读取 `DC_Data/DVDS_Data/RG_Data`，电基读取 `RAW/RAW_n`；三者
+共用同一个统计函数，先合并同名参数的全部原始值，再计算整体四分位数。
 
 ---
 
@@ -306,6 +309,9 @@ python factories/riyuexin/rg_cleaner.py
 # 电基 FT-ALL
 python -m factories.dianji.dc_cleaner <输入目录> <输出目录>
 
+# 电基 PAT（可传一个或多个已清洗 RAW 工作簿）
+python -c "from factories.dianji.pat_cleaner import generate_pat; generate_pat(source_files=[r'<清洗结果.xlsx>'], output_dir=r'<输出目录>')"
+
 # 杰群 批次1（分目录）
 python factories/jiequn/dc_cleaner.py
 python factories/jiequn/dvds_cleaner.py
@@ -348,6 +354,7 @@ python gui/main_window.py
 
 ## 🔄 版本历史
 
+- **v2.6.2** (2026-07-21)：新增电基 PAT 参数分析；读取一个或多个清洗结果的 `RAW/RAW_n` Sheet，并与日月新共用 IQR/1.35、围绕中位数 ±6Sigma 的算法和 PAT 输出格式。
 - **v2.6.1** (2026-07-21)：电基 `FT-ALL` 兼容已验证的 `M/R` 制造批次、周记标点和无标签时间命名；制造主批和周记一致时允许测试机 `Lot` 片号后缀未刷新并输出 WARNING，其他身份冲突仍严格停止。
 - **v2.6.0** (2026-07-20)：新增电基 PowerTECH `FT-ALL` 清洗；支持伪 `.xls` 文本、动态周记/偏置参数命名、提前失效空值保留、`9999` 占位清理、`RAW` 标准输出及 GUI/发布包入口。
 - **v2.5.0** (2026-07-14)：新增杰群 `DC-AI` 默认入口；按 `DC` 子目录、DTA `Item` 中的 DC/DVDS/LCR-RG 特征自动判断 DC-1、DC-统一CSV、DC-3，并拒绝混合或不完整格式目录。
@@ -868,8 +875,10 @@ Sigma, LCL\n计算值, UCL\n计算值, LCL\n更新前, UCL\n更新前, LCL\n更�
 | `factories/riyuexin/dc_cleaner.py` | `DCDataCleaner` | ASE DC cleaner（未继承 BaseCleaner） |
 | `factories/riyuexin/dvds_cleaner.py` | `DVDSCleaner` | ASE DVDS cleaner |
 | `factories/riyuexin/rg_cleaner.py` | `RGCleaner` | ASE RG cleaner |
+| `factories/riyuexin/pat_cleaner.py` | `build_pat`, `generate_pat` | 日月新标准 PAT 入口 |
 | `factories/dianji/powertech_parser.py` | `parse_powertech_file` | PowerTECH 文本解析、参数映射与格式校验 |
 | `factories/dianji/dc_cleaner.py` | `DianjiDCCleaner` | 电基 FT-ALL 合并清洗并输出 `RAW` |
+| `factories/dianji/pat_cleaner.py` | `build_pat`, `generate_pat` | 电基 `RAW/RAW_n` PAT 入口 |
 | `shared/excel_utils.py` | `ExcelOptimizer` | calamine/xlsxwriter 引擎选择 |
 | `shared/excel_utils.py` | `read_excel_fast` | 快速 Excel 读取 |
 | `shared/excel_utils.py` | `write_excel_fast` | 快速 Excel 写入（>1M 行自动分 sheet） |
@@ -879,12 +888,12 @@ Sigma, LCL\n计算值, UCL\n计算值, LCL\n更新前, UCL\n更新前, LCL\n更�
 | `shared/excel_utils.py` | `performance_monitor` / `PerformanceStats` | 性能监控 |
 | `gui/main_window.py` | `MainWindow`, `FACTORIES` | 侧边栏 + 堆叠切换器 |
 | `gui/panels/base_panel.py` | `BasePanel`, `CleanerWorker` | UI 外壳 + QThread |
-| `gui/panels/riyuexin_panel.py` | `RiyuexinPanel` | 3 按钮（DC/DVDS/RG） |
+| `gui/panels/riyuexin_panel.py` | `RiyuexinPanel` | DC/DVDS/RG + PAT/SYL&SBL |
 | `gui/panels/jiequn_panel.py` | `JiequnPanel` | DC-AI + 5个手工清洗入口 + PAT/SYL&SBL |
-| `gui/panels/dianji_panel.py` | `DianjiPanel` | FT-ALL 清洗 + SYL&SBL |
+| `gui/panels/dianji_panel.py` | `DianjiPanel` | FT-ALL 清洗 + PAT/SYL&SBL |
 | `packaging/build_secure_pyz.py` | `create_secure_archive` | 安全构建 `gui.main_window:main` 发布包 |
 
 ---
 
 **开发者**: cc  
-**最后更新**: 2026-07-20
+**最后更新**: 2026-07-21

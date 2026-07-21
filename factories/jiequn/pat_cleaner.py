@@ -108,14 +108,20 @@ def _open_workbook(path: Path) -> pd.ExcelFile:
         return pd.ExcelFile(path, engine="openpyxl")
 
 
-def _matching_data_sheets(sheet_names: Iterable[str]) -> dict[str, list[str]]:
-    """Return DC/DVDS/RG sheets, including numbered split sheets."""
-    matches: dict[str, list[tuple[int, str]]] = {label: [] for label in DATA_LABELS}
+def _matching_data_sheets(
+    sheet_names: Iterable[str],
+    data_labels: tuple[str, ...] = DATA_LABELS,
+    data_sheet_pattern: re.Pattern[str] = DATA_SHEET_PATTERN,
+) -> dict[str, list[str]]:
+    """Return matching data sheets, including numbered split sheets."""
+    matches: dict[str, list[tuple[int, str]]] = {label: [] for label in data_labels}
     for sheet_name in sheet_names:
-        match = DATA_SHEET_PATTERN.fullmatch(str(sheet_name).strip())
+        match = data_sheet_pattern.fullmatch(str(sheet_name).strip())
         if not match:
             continue
         label = match.group(1).upper()
+        if label not in matches:
+            continue
         sequence = int(match.group(2) or 0)
         matches[label].append((sequence, sheet_name))
     return {
@@ -133,21 +139,31 @@ def _valid_source_file(path: Path) -> bool:
     )
 
 
-def _inspect_workbook(path: Path) -> dict[str, list[str]]:
+def _inspect_workbook(
+    path: Path,
+    data_labels: tuple[str, ...] = DATA_LABELS,
+    data_sheet_pattern: re.Pattern[str] = DATA_SHEET_PATTERN,
+) -> dict[str, list[str]]:
     try:
         with _open_workbook(path) as workbook:
-            return _matching_data_sheets(workbook.sheet_names)
+            return _matching_data_sheets(
+                workbook.sheet_names,
+                data_labels=data_labels,
+                data_sheet_pattern=data_sheet_pattern,
+            )
     except Exception as exc:
         logger.warning(f"跳过无法读取的 Excel: {path}: {exc}")
-        return {label: [] for label in DATA_LABELS}
+        return {label: [] for label in data_labels}
 
 
 def _resolve_sheet_sources(
     source_dir: str | Path | None,
     source_files: Iterable[str | Path] | str | Path | None,
+    data_labels: tuple[str, ...] = DATA_LABELS,
+    data_sheet_pattern: re.Pattern[str] = DATA_SHEET_PATTERN,
 ) -> dict[str, list[tuple[Path, str]]]:
     """Resolve explicit files or the legacy directory input into sheet sources."""
-    resolved: dict[str, list[tuple[Path, str]]] = {label: [] for label in DATA_LABELS}
+    resolved: dict[str, list[tuple[Path, str]]] = {label: [] for label in data_labels}
 
     if source_files is not None:
         values = [source_files] if isinstance(source_files, (str, Path)) else list(source_files)
@@ -162,30 +178,35 @@ def _resolve_sheet_sources(
             raise ValueError("PAT 至少需要选择一个清洗结果 Excel 文件")
 
         for path in selected:
-            sheets = _inspect_workbook(path)
-            for label in DATA_LABELS:
+            sheets = _inspect_workbook(path, data_labels, data_sheet_pattern)
+            for label in data_labels:
                 resolved[label].extend((path, sheet) for sheet in sheets[label])
         return resolved
 
     source_path = Path(source_dir or "output/杰群-output").expanduser().resolve()
     if source_path.is_file():
-        return _resolve_sheet_sources(None, [source_path])
+        return _resolve_sheet_sources(
+            None,
+            [source_path],
+            data_labels=data_labels,
+            data_sheet_pattern=data_sheet_pattern,
+        )
     if not source_path.is_dir():
         raise FileNotFoundError(f"PAT 清洗结果目录不存在: {source_path}")
 
     # 兼容原目录入口：每种数据类型仍选最近的一个工作簿，但读取其全部编号 Sheet。
     candidates: dict[str, list[tuple[float, Path, list[str]]]] = {
-        label: [] for label in DATA_LABELS
+        label: [] for label in data_labels
     }
     for path in source_path.rglob("*.xlsx"):
         if not _valid_source_file(path):
             continue
-        sheets = _inspect_workbook(path)
-        for label in DATA_LABELS:
+        sheets = _inspect_workbook(path, data_labels, data_sheet_pattern)
+        for label in data_labels:
             if sheets[label]:
                 candidates[label].append((path.stat().st_mtime, path, sheets[label]))
 
-    for label in DATA_LABELS:
+    for label in data_labels:
         if not candidates[label]:
             continue
         _, path, sheets = max(candidates[label], key=lambda item: item[0])
@@ -248,6 +269,8 @@ def _build_label_rows(label: str, sources: list[tuple[Path, str]]) -> list[dict]
 def build_pat(
     source_dir: str | Path | None = "output/杰群-output",
     source_files: Iterable[str | Path] | str | Path | None = None,
+    data_labels: Iterable[str] = DATA_LABELS,
+    data_sheet_pattern: re.Pattern[str] = DATA_SHEET_PATTERN,
 ) -> pd.DataFrame:
     """Build PAT from explicit workbooks or a legacy cleaned-result directory.
 
@@ -255,10 +278,20 @@ def build_pat(
     time. Values with the same parameter name are combined before quartiles and
     control limits are calculated, so the PAT covers the complete workbook.
     """
-    sheet_sources = _resolve_sheet_sources(source_dir, source_files)
+    normalized_labels = tuple(
+        dict.fromkeys(str(label).upper() for label in data_labels)
+    )
+    if not normalized_labels:
+        raise ValueError("PAT 至少需要一个数据工作表类型")
+    sheet_sources = _resolve_sheet_sources(
+        source_dir,
+        source_files,
+        data_labels=normalized_labels,
+        data_sheet_pattern=data_sheet_pattern,
+    )
     rows: list[dict] = []
 
-    for label in DATA_LABELS:
+    for label in normalized_labels:
         sources = sheet_sources[label]
         if not sources:
             logger.warning(f"未找到 {label} 清洗结果 Sheet")

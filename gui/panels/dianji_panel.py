@@ -16,6 +16,7 @@ from factories.dianji.config import DATA_TYPES, FACTORY_NAME
 class DianjiPanel(BasePanel):
     factory_name = FACTORY_NAME
     data_types = DATA_TYPES
+    pat_analysis_types = ["PAT"]
     yield_analysis_types = ["SYL&SBL"]
     default_input = str(Path.home() / "Desktop")
     default_output = str(Path.home() / "Desktop")
@@ -35,6 +36,13 @@ class DianjiPanel(BasePanel):
                 "FT-ALL", DianjiDCCleaner(inp, out).process_all()
             )
 
+        if data_type == "PAT":
+            from factories.dianji.pat_cleaner import generate_pat
+            source_files = self.selected_input_files()
+            return lambda: self._require_success(
+                "PAT", bool(generate_pat(source_files=source_files, output_dir=out))
+            )
+
         if data_type == "SYL&SBL":
             from factories.dianji.yield_report import generate_report
             return lambda: self._require_success(
@@ -47,5 +55,8 @@ class DianjiPanel(BasePanel):
         if result:
             return True
         raise RuntimeError(
-            f"电基 {label} 处理没有生成有效结果。请确认输入文件/目录和输出目录是否选择正确。"
+            f"电基 {label} 处理没有生成有效结果。"
+            "FT-ALL 请选择 PowerTECH 原始数据目录；"
+            "PAT 请选择一个或多个含 RAW 工作表的电基清洗结果；"
+            "SYL&SBL 请选择封装厂良率 Excel 文件。"
         )
