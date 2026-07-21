@@ -14,7 +14,7 @@ python gui/main_window.py
 python packaging/release/ft_data_cleaner.pyz
 ```
 
-GUI 入口是 `gui.main_window:main`，版本为 2.6.0。
+GUI 入口是 `gui.main_window:main`，版本为 2.6.1。
 
 ## 界面结构
 

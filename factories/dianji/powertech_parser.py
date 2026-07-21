@@ -58,6 +58,8 @@ class OutputColumn:
 class ParsedPowerTechFile:
     path: Path
     identity: FileIdentity
+    metadata_lot: str
+    lot_identity_warning: str | None
     data: pd.DataFrame
     source_rows: int
     kept_rows: int
@@ -65,8 +67,13 @@ class ParsedPowerTechFile:
 
 
 _FILENAME_RE = re.compile(
-    r"^(?P<product>.+)_(?P<manufacturing_lot>[mM]\d{9}-\d{3})\s+"
-    r"(?P<batch>[cC]\d{6}\.\d{2})\s+(?P<test_tag>[A-Za-z]+\d{12})$"
+    r"^(?P<product>.+)_(?P<manufacturing_lot>[mMrR]\d{9}-\d{3})\s+"
+    r"(?P<batch>[cC]\d{6}[.,，。]\d{2})\s*"
+    r"(?P<test_tag>(?:[A-Za-z]+)?\d{12})$"
+)
+_LOT_RE = re.compile(
+    r"(?P<manufacturing_lot>[mMrR]\d{9}-\d{3})\s+"
+    r"(?P<batch>[cC]\d{6}[.,，。]\d{2})"
 )
 _ITEM_RE = re.compile(r"^(?P<number>\d+)\s+(?P<name>.+?)\s*$")
 
@@ -77,13 +84,13 @@ def parse_dianji_filename(path_or_name: str | Path) -> FileIdentity:
     match = _FILENAME_RE.fullmatch(stem)
     if not match:
         raise DianjiFormatError(
-            "电基文件名不符合 '<产品>_<制造批次> <周记> <测试时间>.xls' 规则: "
+            "电基文件名不符合 '<产品>_<M/R制造批次> <周记>[标签]<测试时间>.xls' 规则: "
             f"{Path(path_or_name).name}"
         )
     return FileIdentity(
         product=match.group("product").strip(),
         manufacturing_lot=match.group("manufacturing_lot").upper(),
-        batch=match.group("batch").upper(),
+        batch=_normalize_batch(match.group("batch")),
         test_tag=match.group("test_tag").upper(),
     )
 
@@ -107,7 +114,9 @@ def parse_powertech_file(path: str | Path) -> ParsedPowerTechFile:
         raise DianjiFormatError(f"不是 PowerTECH 文本导出文件: {path.name}")
 
     labels = _locate_header_rows(rows, path)
-    _validate_metadata_lot(rows, labels["Serial#"], identity, path)
+    metadata_lot, lot_identity_warning = _validate_metadata_lot(
+        rows, labels["Serial#"], identity, path
+    )
     items = _build_test_items(rows, labels, path)
     output_columns = _build_output_columns(items, path)
 
@@ -132,6 +141,8 @@ def parse_powertech_file(path: str | Path) -> ParsedPowerTechFile:
     return ParsedPowerTechFile(
         path=path,
         identity=identity,
+        metadata_lot=metadata_lot,
+        lot_identity_warning=lot_identity_warning,
         data=data,
         source_rows=source_rows,
         kept_rows=len(data),
@@ -170,7 +181,7 @@ def _locate_header_rows(rows: list[list[str]], path: Path) -> dict[str, int]:
 
 def _validate_metadata_lot(
     rows: list[list[str]], serial_index: int, identity: FileIdentity, path: Path
-) -> None:
+) -> tuple[str, str | None]:
     lot_text = ""
     for row in rows[:serial_index]:
         if row and row[0].rstrip(":").strip().lower() == "lot":
@@ -179,10 +190,36 @@ def _validate_metadata_lot(
     if not lot_text:
         raise DianjiFormatError(f"{path.name} 缺少 Lot 元数据")
     expected = f"{identity.manufacturing_lot} {identity.batch}"
-    if expected.casefold() not in lot_text.casefold():
+    match = _LOT_RE.search(lot_text)
+    if not match:
         raise DianjiFormatError(
             f"{path.name} 的文件名与 Lot 元数据不一致: filename={expected}, Lot={lot_text}"
         )
+
+    metadata_manufacturing_lot = match.group("manufacturing_lot").upper()
+    metadata_batch = _normalize_batch(match.group("batch"))
+    if (
+        metadata_manufacturing_lot == identity.manufacturing_lot
+        and metadata_batch == identity.batch
+    ):
+        return lot_text, None
+
+    filename_main_lot = identity.manufacturing_lot.rsplit("-", 1)[0]
+    metadata_main_lot = metadata_manufacturing_lot.rsplit("-", 1)[0]
+    if metadata_batch != identity.batch or metadata_main_lot != filename_main_lot:
+        raise DianjiFormatError(
+            f"{path.name} 的文件名与 Lot 元数据不一致: filename={expected}, Lot={lot_text}"
+        )
+
+    warning = (
+        f"{path.name} 的 Lot 片号后缀未刷新: filename={expected}, Lot={lot_text}；"
+        f"制造主批 {filename_main_lot} 和周记 {identity.batch} 一致，已按文件名继续"
+    )
+    return lot_text, warning
+
+
+def _normalize_batch(value: str) -> str:
+    return value.upper().replace(",", ".").replace("，", ".").replace("。", ".")
 
 
 def _build_test_items(

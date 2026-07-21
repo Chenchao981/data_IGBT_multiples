@@ -29,9 +29,13 @@ def _make_source(
     directory: Path,
     manufacturing_lot="M000000001-001",
     batch="C000001.00",
+    metadata_manufacturing_lot=None,
+    metadata_batch=None,
     item_names=None,
 ):
     item_names = item_names or ITEM_NAMES
+    metadata_manufacturing_lot = metadata_manufacturing_lot or manufacturing_lot
+    metadata_batch = metadata_batch or batch
     name = f"TESTPRODUCT-7E00_{manufacturing_lot} {batch} ALL260101000000.xls"
     path = directory / name
 
@@ -102,10 +106,10 @@ def _make_source(
 
     lines = [
         "PowerTECH Test System\t\tTester Serial: \tSDTS10191810\t\tStation : \tA",
-        f"DataFileName:\t\tD:\\EUIT_Test_Data\\{manufacturing_lot} {batch}.plf",
+        f"DataFileName:\t\tD:\\EUIT_Test_Data\\{metadata_manufacturing_lot} {metadata_batch}.plf",
         "TestFileName:\t\tD:\\EUIT_Prgorm_A\\DC 测试程序\\program.ptf",
         "Device:\t\t",
-        f"Lot:\t\t{manufacturing_lot} {batch}",
+        f"Lot:\t\t{metadata_manufacturing_lot} {metadata_batch}",
         "Operator:\t\t",
         "Description:\t\t",
         _header_row("Item Name", [f"{index} {value}" for index, value in enumerate(item_names, start=1)]),
@@ -138,6 +142,28 @@ class DianjiFilenameTests(unittest.TestCase):
         self.assertEqual(identity.manufacturing_lot, "M000000001-001")
         self.assertEqual(identity.batch, "C000001.00")
 
+    def test_accepts_verified_powertech_filename_variants(self):
+        cases = (
+            (
+                "TESTPRODUCT-7E00_M260422047-001 C203133.03260428110238.xls",
+                "M260422047-001", "C203133.03", "260428110238",
+            ),
+            (
+                "TESTPRODUCT-7E00_m260422048-004 c203133。00 dc260429183009.xls",
+                "M260422048-004", "C203133.00", "DC260429183009",
+            ),
+            (
+                "TESTPRODUCT-7E00_R251225027-001 C152722,00 ALL260102090022.xls",
+                "R251225027-001", "C152722.00", "ALL260102090022",
+            ),
+        )
+        for filename, manufacturing_lot, batch, test_tag in cases:
+            with self.subTest(filename=filename):
+                identity = parse_dianji_filename(filename)
+                self.assertEqual(identity.manufacturing_lot, manufacturing_lot)
+                self.assertEqual(identity.batch, batch)
+                self.assertEqual(identity.test_tag, test_tag)
+
 
 class PowerTechParserTests(unittest.TestCase):
     def test_matches_reference_columns_and_keeps_partial_rows_after_dvds(self):
@@ -166,6 +192,57 @@ class PowerTechParserTests(unittest.TestCase):
         self.assertTrue(pd.isna(parsed.data.loc[2, "IDSS100(nA)"]))
         self.assertEqual(parsed.invalid_marker_counts, {"IDSS100(nA)": 1})
         self.assertEqual(parsed.data["批次"].unique().tolist(), ["C000001.00"])
+
+    def test_allows_stale_lot_piece_suffix_when_main_lot_and_batch_match(self):
+        with tempfile.TemporaryDirectory() as temp:
+            parsed = parse_powertech_file(
+                _make_source(
+                    Path(temp),
+                    manufacturing_lot="M000000001-004",
+                    metadata_manufacturing_lot="M000000001-003",
+                )
+            )
+
+        self.assertEqual(parsed.identity.manufacturing_lot, "M000000001-004")
+        self.assertEqual(parsed.metadata_lot, "M000000001-003 C000001.00")
+        self.assertIn("Lot 片号后缀未刷新", parsed.lot_identity_warning)
+
+    def test_normalizes_batch_punctuation_without_identity_warning(self):
+        with tempfile.TemporaryDirectory() as temp:
+            parsed = parse_powertech_file(
+                _make_source(
+                    Path(temp),
+                    manufacturing_lot="R251225027-001",
+                    batch="C152722,00",
+                    metadata_batch="C152722,00",
+                )
+            )
+
+        self.assertEqual(parsed.identity.batch, "C152722.00")
+        self.assertIsNone(parsed.lot_identity_warning)
+        self.assertEqual(parsed.data["批次"].unique().tolist(), ["C152722.00"])
+
+    def test_rejects_lot_mismatch_outside_piece_suffix(self):
+        cases = (
+            {
+                "metadata_manufacturing_lot": "M000000002-003",
+                "message": "filename=M000000001-004 C000001.00",
+            },
+            {
+                "metadata_manufacturing_lot": "M000000001-003",
+                "metadata_batch": "C000002.00",
+                "message": "Lot=M000000001-003 C000002.00",
+            },
+        )
+        for case in cases:
+            with self.subTest(case=case), tempfile.TemporaryDirectory() as temp:
+                source_options = dict(case)
+                message = source_options.pop("message")
+                path = _make_source(
+                    Path(temp), manufacturing_lot="M000000001-004", **source_options
+                )
+                with self.assertRaisesRegex(DianjiFormatError, message):
+                    parse_powertech_file(path)
 
     def test_rejects_changed_item_layout_instead_of_misaligning_columns(self):
         with tempfile.TemporaryDirectory() as temp:
@@ -207,6 +284,24 @@ class DianjiCleanerTests(unittest.TestCase):
             self.assertEqual(result["批次"].value_counts().to_dict(), {"C000001.00": 3, "C000002.00": 3})
             self.assertEqual(cleaner.last_run_summary["source_rows"], 8)
             self.assertEqual(cleaner.last_run_summary["dropped_before_dvds"], 2)
+
+    def test_reports_tolerated_stale_lot_piece_suffix(self):
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            input_dir = root / "input"
+            input_dir.mkdir()
+            _make_source(
+                input_dir,
+                manufacturing_lot="M000000001-004",
+                metadata_manufacturing_lot="M000000001-003",
+            )
+            cleaner = DianjiDCCleaner(input_dir, root / "output")
+
+            with self.assertLogs("factories.dianji.dc_cleaner", level="WARNING") as logs:
+                self.assertTrue(cleaner.process_all())
+
+            self.assertIn("Lot 片号后缀未刷新", "\n".join(logs.output))
+            self.assertEqual(len(cleaner.last_run_summary["identity_warnings"]), 1)
 
     def test_next_output_path_preserves_first_reference_name_then_sequences(self):
         with tempfile.TemporaryDirectory() as temp:

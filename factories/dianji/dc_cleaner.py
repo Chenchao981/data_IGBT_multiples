@@ -74,6 +74,8 @@ class DianjiDCCleaner(BaseCleaner):
         for path in files:
             parsed = parse_powertech_file(path)
             parsed_files.append(parsed)
+            if parsed.lot_identity_warning:
+                logger.warning("%s", parsed.lot_identity_warning)
             logger.info(
                 "已解析 %s: 源记录=%s, 保留=%s, 周记=%s",
                 path.name,
@@ -126,6 +128,11 @@ class DianjiDCCleaner(BaseCleaner):
             "dropped_before_dvds": source_rows - len(merged),
             "batch_counts": batch_counts,
             "invalid_marker_counts": dict(invalid_counts),
+            "identity_warnings": [
+                parsed.lot_identity_warning
+                for parsed in parsed_files
+                if parsed.lot_identity_warning
+            ],
             "columns": list(merged.columns),
         }
         logger.info(
