@@ -4,7 +4,11 @@ from pathlib import Path
 
 import pandas as pd
 
-from factories.dianji.dc_cleaner import DianjiDCCleaner, next_output_path
+from factories.dianji.dc_cleaner import (
+    DianjiDCCleaner,
+    next_output_path,
+    output_product_name,
+)
 from factories.dianji.powertech_parser import (
     DianjiFormatError,
     parse_dianji_filename,
@@ -344,6 +348,7 @@ class DianjiCleanerTests(unittest.TestCase):
             self.assertTrue(cleaner.process_all())
 
             self.assertEqual(cleaner.last_output_file.name, "TESTPRODUCT-7E00 DJ PAT.xlsx")
+            self.assertEqual(cleaner.last_output_file.parent.name, "TESTPRODUCT_001")
             result = pd.read_excel(cleaner.last_output_file, sheet_name="RAW")
             self.assertEqual(result.shape, (6, 21))
             self.assertEqual(result["NUM"].tolist(), list(range(1, 7)))
@@ -351,6 +356,10 @@ class DianjiCleanerTests(unittest.TestCase):
             self.assertEqual(cleaner.last_run_summary["source_rows"], 8)
             self.assertEqual(cleaner.last_run_summary["dropped_before_dvds"], 2)
             self.assertTrue(cleaner.last_scatter_manifest.is_file())
+            self.assertEqual(
+                cleaner.last_scatter_manifest.parent,
+                cleaner.last_output_file.parent,
+            )
             manifest, data, specs = load_scatter_bundle(
                 cleaner.last_scatter_manifest
             )
@@ -384,14 +393,24 @@ class DianjiCleanerTests(unittest.TestCase):
             self.assertIn("Lot 片号后缀未刷新", "\n".join(logs.output))
             self.assertEqual(len(cleaner.last_run_summary["identity_warnings"]), 1)
 
-    def test_next_output_path_preserves_first_reference_name_then_sequences(self):
+    def test_output_product_name_removes_only_trailing_package_code(self):
+        self.assertEqual(
+            output_product_name("NCEAP016N85LL(M)-3E00"),
+            "NCEAP016N85LL(M)",
+        )
+        self.assertEqual(output_product_name("PRODUCT"), "PRODUCT")
+
+    def test_next_output_path_uses_product_folder_sequence(self):
         with tempfile.TemporaryDirectory() as temp:
             output_dir = Path(temp)
-            first = next_output_path(output_dir, "PRODUCT")
-            self.assertEqual(first.name, "PRODUCT DJ PAT.xlsx")
+            product = "NCEAP016N85LL(M)-3E00"
+            first = next_output_path(output_dir, product)
+            self.assertEqual(first.parent.name, "NCEAP016N85LL(M)_001")
+            self.assertEqual(first.name, f"{product} DJ PAT.xlsx")
             first.touch()
-            second = next_output_path(output_dir, "PRODUCT")
-            self.assertEqual(second.name, "PRODUCT DJ PAT_001.xlsx")
+            second = next_output_path(output_dir, product)
+            self.assertEqual(second.parent.name, "NCEAP016N85LL(M)_002")
+            self.assertEqual(second.name, f"{product} DJ PAT.xlsx")
 
 
 if __name__ == "__main__":

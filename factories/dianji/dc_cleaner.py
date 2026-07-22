@@ -26,10 +26,13 @@ from factories.dianji.powertech_parser import (
     is_powertech_text_file,
     parse_powertech_file,
 )
-from shared.excel_utils import write_excel_fast
+from shared.excel_utils import create_output_run_dir, write_excel_fast
 
 
 logger = logging.getLogger(__name__)
+
+
+_PACKAGE_CODE_SUFFIX_RE = re.compile(r"-\d[A-Z]\d{2}$", re.IGNORECASE)
 
 
 class DianjiDCCleaner(BaseCleaner):
@@ -171,25 +174,16 @@ class DianjiDCCleaner(BaseCleaner):
 
 
 def next_output_path(output_dir: str | Path, product: str) -> Path:
-    """Match '<product> DJ PAT.xlsx' and add _001/_002 only on reruns."""
-    output_dir = Path(output_dir)
-    output_dir.mkdir(parents=True, exist_ok=True)
-    base = output_dir / f"{product}{OUTPUT_FILE_SUFFIX}"
-    if not base.exists():
-        return base
+    """Create '<product family>_NNN' and place the RAW workbook inside it."""
+    run_dir = create_output_run_dir(output_dir, [output_product_name(product)])
+    return run_dir / f"{product}{OUTPUT_FILE_SUFFIX}"
 
-    stem = base.stem
-    suffix = base.suffix
-    pattern = re.compile(rf"^{re.escape(stem)}_(\d{{3,}}){re.escape(suffix)}$", re.I)
-    sequence = max(
-        (
-            int(match.group(1))
-            for path in output_dir.iterdir()
-            if path.is_file() and (match := pattern.match(path.name))
-        ),
-        default=0,
-    ) + 1
-    return output_dir / f"{stem}_{sequence:03d}{suffix}"
+
+def output_product_name(product: str) -> str:
+    """Drop a trailing package code such as '-3E00' from the run-folder name."""
+    product = product.strip()
+    family = _PACKAGE_CODE_SUFFIX_RE.sub("", product).strip()
+    return family or product
 
 
 def main(argv: list[str] | None = None) -> int:
