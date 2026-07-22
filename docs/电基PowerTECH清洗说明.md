@@ -50,8 +50,8 @@ IDSS<第二偏置>(nA), VTH3(V), DELTA BV, DELTA VTH
 | Rg(R) | 12 `LCR-RG` | 名称按参考模板写为 `Rg(R)` |
 | VTH1/2/3 | 16 / 19 / 32 | Item 14 是程序占位 VTH，跳过 |
 | BVDSS1/2 | 20 / 21 | 按源顺序编号 |
-| IDSS | 22 / 29 | 从 `VDS=` 动态生成条件名 |
-| IGSS/ISGS | 23–26 / 30–31 | 正 VGS 为 IGSS，负 VGS 为 ISGS |
+| IDSS | 22，以及 29 或 31 | 从 `VDS=` 动态生成条件名 |
+| IGSS/ISGS | 23–26 / 30，以及 29 或 31 | 正 VGS 为 IGSS，负 VGS 为 ISGS |
 | RDON | 27 | 从 `Bias2` 的 `VGS=` 生成条件名 |
 | VFSD | 28 | 保留源 V 单位 |
 | DELTA BV | 33 | 头部引用 BVDSS Item 20/21 |
@@ -74,6 +74,8 @@ IDSS<第二偏置>(nA), VTH3(V), DELTA BV, DELTA VTH
 - 文件名制造主批/周记与头部 `Lot:` 元数据一致；若仅片号后缀（如 `-004`
   对 `-003`）未刷新，则输出 WARNING 并按文件名继续，制造主批或周记不同仍会停止；
 - 必需 Item 编号、参数基名和数量符合当前已验证测试程序；
+- Item 29–31 仅接受两种真实样本已验证布局：`IDSS/IGSS/IGSS` 或
+  `IGSS/IGSS/IDSS`；程序按参数名与 VGS 正负条件恢复统一输出顺序；
 - 同一次运行只包含一个产品；
 - 多文件生成的输出列完全一致。
 
@@ -81,7 +83,7 @@ IDSS<第二偏置>(nA), VTH3(V), DELTA BV, DELTA VTH
 
 ## 6. 当前限制
 
-- 当前严格支持已验证的 34 项 PowerTECH FT-ALL 测试程序布局。
+- 当前严格支持已验证的两种 34 项 PowerTECH FT-ALL 测试程序布局。
 - 测试程序若调整 Item 编号或新增/删除目标参数，需要先用真实新样例更新配置和测试。
 - 输出遵循用户提供的 `RAW` 数据模板；模板中遗留的图表对象不属于清洗契约，不复制。
 

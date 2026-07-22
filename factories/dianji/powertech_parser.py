@@ -16,9 +16,10 @@ from factories.dianji.config import (
     EXPECTED_ITEM_BASES,
     EXPECTED_ITEM_COUNTS,
     INVALID_NUMERIC_MARKERS,
-    OUTPUT_ITEM_ORDER,
+    REQUIRED_ITEM_NUMBERS,
     SOURCE_ENCODINGS,
     SOURCE_SIGNATURE,
+    SUPPORTED_TAIL_LAYOUTS,
     TARGET_UNITS,
     UNIT_FACTORS,
 )
@@ -254,7 +255,7 @@ def _build_test_items(
         raise DianjiFormatError(f"{path.name} 的 Item 编号重复")
 
     by_number = {item.item_no: item for item in items}
-    missing_numbers = [number for number in OUTPUT_ITEM_ORDER if number not in by_number]
+    missing_numbers = [number for number in REQUIRED_ITEM_NUMBERS if number not in by_number]
     if missing_numbers:
         raise DianjiFormatError(f"{path.name} 缺少输出所需 Item: {missing_numbers}")
     for number, expected_bases in EXPECTED_ITEM_BASES.items():
@@ -263,6 +264,14 @@ def _build_test_items(
             raise DianjiFormatError(
                 f"{path.name} 的 Item #{number} 应为 {sorted(expected_bases)}，实际为 {actual}"
             )
+
+    actual_tail_layout = tuple(
+        (number, by_number[number].base_name) for number in (29, 30, 31)
+    )
+    if actual_tail_layout not in SUPPORTED_TAIL_LAYOUTS:
+        raise DianjiFormatError(
+            f"{path.name} 的 Item #29-31 布局未经验证: {actual_tail_layout}"
+        )
 
     counts = Counter(item.base_name for item in items)
     for base_name, expected_count in EXPECTED_ITEM_COUNTS.items():
@@ -288,15 +297,54 @@ def _build_output_columns(items: list[TestItem], path: Path) -> list[OutputColum
             [item for item in items if item.base_name == "BVDSS"], start=1
         )
     }
+    output_item_numbers = _ordered_output_item_numbers(by_number, path)
     columns = [
         _make_output_column(by_number[number], vth_numbers, bvdss_numbers, by_number, path)
-        for number in OUTPUT_ITEM_ORDER
+        for number in output_item_numbers
     ]
     names = [column.name for column in columns]
     duplicates = [name for name, count in Counter(names).items() if count > 1]
     if duplicates:
         raise DianjiFormatError(f"{path.name} 生成了重复输出列: {duplicates}")
     return columns
+
+
+def _ordered_output_item_numbers(
+    items_by_number: dict[int, TestItem], path: Path
+) -> list[int]:
+    """Return one stable RAW order for both verified item 29-31 layouts."""
+    tail_items = [items_by_number[number] for number in (29, 30, 31)]
+    idss_items = [item for item in tail_items if item.base_name == "IDSS"]
+    igss_items = [item for item in tail_items if item.base_name == "IGSS"]
+    if len(idss_items) != 1 or len(igss_items) != 2:
+        raise DianjiFormatError(
+            f"{path.name} 的 Item #29-31 必须包含 1 个 IDSS 和 2 个 IGSS"
+        )
+
+    igss_with_conditions = [
+        (item, _condition_decimal(item.bias1, "VGS", path, item.item_no))
+        for item in igss_items
+    ]
+    negative_igss = [
+        item for item, condition in igss_with_conditions if condition.startswith("-")
+    ]
+    positive_igss = [
+        item for item, condition in igss_with_conditions if not condition.startswith("-")
+    ]
+    magnitudes = {condition.lstrip("+-") for _, condition in igss_with_conditions}
+    if len(negative_igss) != 1 or len(positive_igss) != 1 or len(magnitudes) != 1:
+        raise DianjiFormatError(
+            f"{path.name} 的 Item #29-31 IGSS 必须是一组正负对称 VGS 条件: "
+            f"{[(item.item_no, condition) for item, condition in igss_with_conditions]}"
+        )
+
+    return [
+        4, 12, 16, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28,
+        negative_igss[0].item_no,
+        positive_igss[0].item_no,
+        idss_items[0].item_no,
+        32, 33, 34,
+    ]
 
 
 def _make_output_column(

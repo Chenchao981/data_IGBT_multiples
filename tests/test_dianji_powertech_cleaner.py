@@ -32,8 +32,12 @@ def _make_source(
     metadata_manufacturing_lot=None,
     metadata_batch=None,
     item_names=None,
+    verified_tail_variant=False,
 ):
-    item_names = item_names or ITEM_NAMES
+    item_names = list(item_names or ITEM_NAMES)
+    if verified_tail_variant:
+        item_names[28] = "IGSS"
+        item_names[30] = "IDSS"
     metadata_manufacturing_lot = metadata_manufacturing_lot or manufacturing_lot
     metadata_batch = metadata_batch or batch
     name = f"TESTPRODUCT-7E00_{manufacturing_lot} {batch} ALL260101000000.xls"
@@ -58,6 +62,9 @@ def _make_source(
     bias1[28] = "VDS=90.00V"
     bias1[29] = "VGS=10.00V"
     bias1[30] = "VGS=-10.00V"
+    if verified_tail_variant:
+        bias1[28] = "VGS=-10.00V"
+        bias1[30] = "VDS=90.00V"
     bias1[31] = "ID=250.0uA"
     bias1[32] = "Value=#21"
     bias2[32] = "Value=#20"
@@ -95,6 +102,8 @@ def _make_source(
         33: 0.0152,
         34: 0.1481,
     }
+    if verified_tail_variant:
+        values[29], values[31] = values[31], values[29]
     for item_number, value in values.items():
         full[item_number + 2] = str(value)
 
@@ -193,6 +202,19 @@ class PowerTechParserTests(unittest.TestCase):
         self.assertEqual(parsed.invalid_marker_counts, {"IDSS100(nA)": 1})
         self.assertEqual(parsed.data["批次"].unique().tolist(), ["C000001.00"])
 
+    def test_accepts_verified_item_29_31_variant_with_stable_output_order(self):
+        with tempfile.TemporaryDirectory() as temp:
+            parsed = parse_powertech_file(
+                _make_source(Path(temp), verified_tail_variant=True)
+            )
+
+        columns = list(parsed.data.columns)
+        self.assertLess(columns.index("ISGS10(nA)"), columns.index("IGSS10(nA)"))
+        self.assertLess(columns.index("IGSS10(nA)"), columns.index("IDSS90(nA)"))
+        self.assertEqual(parsed.data.loc[0, "ISGS10(nA)"], -1.3174)
+        self.assertEqual(parsed.data.loc[0, "IGSS10(nA)"], 0.099)
+        self.assertEqual(parsed.data.loc[0, "IDSS90(nA)"], 11.819)
+
     def test_allows_stale_lot_piece_suffix_when_main_lot_and_batch_match(self):
         with tempfile.TemporaryDirectory() as temp:
             parsed = parse_powertech_file(
@@ -272,6 +294,7 @@ class DianjiCleanerTests(unittest.TestCase):
                 input_dir,
                 manufacturing_lot="M000000002-001",
                 batch="C000002.00",
+                verified_tail_variant=True,
             )
             cleaner = DianjiDCCleaner(input_dir, output_dir)
 

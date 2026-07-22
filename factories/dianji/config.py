@@ -15,11 +15,10 @@ SOURCE_ENCODINGS = ("utf-8-sig", "gb18030")
 OUTPUT_SHEET_NAME = "RAW"
 OUTPUT_FILE_SUFFIX = " DJ PAT.xlsx"
 
-# The user's reference workbook selects these PowerTECH item numbers in this
-# exact business order.  Names and bias values are still read dynamically from
-# each source header, so products with different voltage conditions produce
-# names such as IDSS100(nA) / IDSS90(nA) instead of hard-coded product values.
-OUTPUT_ITEM_ORDER = (
+# Required PowerTECH item numbers.  The parser derives the final business order
+# from parameter names and bias conditions because verified test programs use
+# two different arrangements for items 29-31.
+REQUIRED_ITEM_NUMBERS = (
     4,   # DVDS_EX
     12,  # LCR-RG
     16,  # VTH1 (the first VTH, item 14, is a fixture/program placeholder)
@@ -33,9 +32,9 @@ OUTPUT_ITEM_ORDER = (
     26,  # IGSS -20V -> ISGS20
     27,  # RDON
     28,  # VFSD
-    31,  # IGSS -10V -> ISGS10 (reference workbook order)
+    29,  # second IDSS or IGSS -10V, depending on the verified program layout
     30,  # IGSS +10V
-    29,  # second IDSS
+    31,  # IGSS -10V or second IDSS, depending on the verified program layout
     32,  # VTH3
     33,  # DELTA BV
     34,  # DELTA VTH
@@ -55,12 +54,20 @@ EXPECTED_ITEM_BASES = {
     26: {"IGSS"},
     27: {"RDON"},
     28: {"VFSD"},
-    29: {"IDSS"},
+    29: {"IDSS", "IGSS"},
     30: {"IGSS"},
-    31: {"IGSS"},
+    31: {"IDSS", "IGSS"},
     32: {"VTH"},
     33: {"DELTA"},
     34: {"DELTA"},
+}
+
+# Only these two item 29-31 layouts have been verified from real PowerTECH
+# exports.  Counts alone are insufficient because they could accept a third,
+# unverified permutation and silently change the RAW column meaning.
+SUPPORTED_TAIL_LAYOUTS = {
+    ((29, "IDSS"), (30, "IGSS"), (31, "IGSS")),
+    ((29, "IGSS"), (30, "IGSS"), (31, "IDSS")),
 }
 
 EXPECTED_ITEM_COUNTS = {

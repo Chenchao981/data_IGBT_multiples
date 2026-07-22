@@ -14,7 +14,7 @@ import glob
 import fnmatch
 from pathlib import Path
 
-VERSION = '2.7.2'
+VERSION = '2.7.3'
 
 # --- Configuration ---
 # Project root
@@ -223,6 +223,7 @@ Notes:
 - Mixed DC-1, DC-unified, and DC-3 directories are rejected instead of guessed.
 - For Jiequn DC-3, select the third-line DC1 root or a product directory.
 - Dianji FT-ALL accepts a directory of PowerTECH tab-delimited text files with .xls suffixes.
+- Dianji supports both verified item 29-31 layouts and restores one stable RAW column order.
 - PAT accepts one or more cleaned Excel files; Dianji uses RAW/RAW_n sheets, while ASE/Jiequn use DC/DVDS/RG_Data sheets.
 - SYL&SBL accepts one .xls or .xlsx yield workbook.
 - Output files are saved under the selected output directory.
