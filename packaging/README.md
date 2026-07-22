@@ -47,12 +47,14 @@ python build_secure_pyz.py
 - ✅ GUI界面代码
 - ✅ 必要的依赖文件
 - ✅ requirements.txt
+- ✅ Plotly/Streamlit 散点图逻辑和独立前端入口
 
 ## 输出
 
 ### 生成文件
 - `release/ft_data_cleaner.pyz` - 主程序包
 - `release/USAGE.txt` - 使用说明
+- `release/frontend/ft_scatter_app.py` - Streamlit 物理启动入口
 
 ### 运行方式
 ```bash
@@ -72,6 +74,6 @@ python ft_data_cleaner.pyz
 
 ## 版本信息
 
-- 版本：2.6.2
+- 版本：2.7.0
 - 作者：cc
 - 创建时间：2025-01-20 

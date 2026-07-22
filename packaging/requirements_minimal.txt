@@ -5,6 +5,8 @@
 pandas>=2.2.0,<2.4.0
 openpyxl>=3.0.0,<3.2.0
 PyQt5>=5.15.0,<5.16.0
+plotly>=5.0.0
+streamlit>=1.28.0
 
 # 性能优化依赖（可选，但建议保留）
 python-calamine>=0.2.0
@@ -15,5 +17,5 @@ PyInstaller>=5.0.0,<7.0.0
 
 # 注意：
 # 1. 版本范围限制可以减少依赖冲突
-# 2. 避免安装不必要的依赖包如matplotlib、seaborn等
+# 2. Plotly 和 Streamlit 用于日月新 DC 散点图
 # 3. 如果用户已有完整的anaconda环境，可以跳过这些包的安装 

@@ -14,7 +14,7 @@ import glob
 import fnmatch
 from pathlib import Path
 
-VERSION = '2.6.2'
+VERSION = '2.7.0'
 
 # --- Configuration ---
 # Project root
@@ -24,7 +24,7 @@ target_file = os.path.join(os.path.dirname(__file__), 'release', 'ft_data_cleane
 # Application entry point
 main_entry_point = 'gui.main_window:main'
 # Top-level packages included in the PYZ
-packages_to_include = ['gui', 'factories', 'shared']
+packages_to_include = ['gui', 'factories', 'shared', 'frontend']
 # Root-level Python files included in the PYZ
 files_to_include = []
 
@@ -189,6 +189,19 @@ def create_secure_archive():
     shutil.rmtree(temp_source_dir)
     print(f"Removed temporary directory: {temp_source_dir}")
 
+def sync_release_support_files():
+    """Copy runtime dependencies and the physical Streamlit entry into release."""
+    release_dir = Path(target_file).parent
+    requirements_src = Path(source_root) / 'requirements.txt'
+    shutil.copy2(requirements_src, release_dir / 'requirements.txt')
+
+    frontend_src = Path(source_root) / 'frontend'
+    frontend_dest = release_dir / 'frontend'
+    if frontend_dest.exists():
+        shutil.rmtree(frontend_dest)
+    included, excluded = copy_directory_filtered(str(frontend_src), str(frontend_dest))
+    print(f"Synced frontend runtime: included {included}, excluded {excluded}")
+
 def create_usage_instructions():
     """Create release usage instructions."""
     usage_file = os.path.join(os.path.dirname(target_file), 'USAGE.txt')
@@ -201,7 +214,7 @@ Run:
 3. Start the application: python ft_data_cleaner.pyz
 
 Features:
-- ASE: DC, DVDS, RG, PAT, and SYL&SBL
+- ASE: DC, FT scatter charts, DVDS, RG, PAT, and SYL&SBL
 - Jiequn: DC-AI, DC-1, DC-unified, DC-3, DVDS, RG, PAT, and SYL&SBL
 - Dianji: FT-ALL cleaning, PAT, and SYL&SBL
 
@@ -213,6 +226,8 @@ Notes:
 - PAT accepts one or more cleaned Excel files; Dianji uses RAW/RAW_n sheets, while ASE/Jiequn use DC/DVDS/RG_Data sheets.
 - SYL&SBL accepts one .xls or .xlsx yield workbook.
 - Output files are saved under the selected output directory.
+- After ASE DC cleaning succeeds, click FT Scatter Chart to open one chart per parameter.
+- Scatter limits come directly from each source file's Low Limit and High Limit rows.
 - Review the application log if processing fails.
 
 Version: {VERSION}
@@ -228,6 +243,7 @@ if __name__ == '__main__':
     print("Building secure FT Data Cleaner release...")
     print("=" * 60)
     create_secure_archive()
+    sync_release_support_files()
     create_usage_instructions()
     print("=" * 60)
     print("Secure build completed.")

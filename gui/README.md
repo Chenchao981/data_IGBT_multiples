@@ -14,7 +14,7 @@ python gui/main_window.py
 python packaging/release/ft_data_cleaner.pyz
 ```
 
-GUI 入口是 `gui.main_window:main`，版本为 2.6.2。
+GUI 入口是 `gui.main_window:main`，版本为 2.7.0。
 
 ## 界面结构
 
@@ -22,6 +22,14 @@ GUI 入口是 `gui.main_window:main`，版本为 2.6.2。
 - 右侧：当前封装厂的 FT 数据清洗、PAT 参数分析、封装良率分析。
 - 输入/输出默认指向用户桌面，可手工输入或浏览选择。
 - 长任务通过 `CleanerWorker(QThread)` 执行，日志实时显示，运行期间按钮禁用。
+
+## 日月新 DC 散点图
+
+- 先执行日月新 DC 清洗；成功后才启用“FT 散点图”按钮。
+- 清洗器利用内存中的清洗数据生成散点图数据包，不重复读取原始 Excel。
+- 页面逐个展示全部参数，X 轴为测试序号，Y 轴为参数值。
+- `Low Limit` 和 `High Limit` 分别作为 LSL、USL；规格不同的来源文件按各自区间画线。
+- Streamlit 使用本机 `8502` 端口。发布包旁必须保留 `frontend/ft_scatter_app.py`。
 
 ## 杰群 DC-AI
 
@@ -51,7 +59,7 @@ DC 入口以及 DVDS、RG 入口。
 
 ```powershell
 python -m unittest discover -s tests -v
-python -m compileall -q gui factories shared packaging tests
+python -m compileall -q gui factories shared frontend packaging tests
 python packaging/build_secure_pyz.py
 ```
 

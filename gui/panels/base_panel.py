@@ -34,6 +34,7 @@ class CleanerWorker(QThread):
         super().__init__()
         self.task_fn = task_fn
         self.task_label = task_label
+        self.result = None
 
     def run(self):
         writer = _SignalTextWriter(self.progress)
@@ -49,6 +50,7 @@ class CleanerWorker(QThread):
             root_logger.addHandler(log_handler)
             with redirect_stdout(writer), redirect_stderr(writer):
                 result = self.task_fn()
+                self.result = result
                 writer.flush()
             if result:
                 self.finished.emit(f"{self.task_label} 完成", True)
@@ -120,6 +122,7 @@ class BasePanel(QWidget):
     post_process_types: list = []
     pat_analysis_types: list = []
     yield_analysis_types: list = []
+    scatter_supported_types: list = []
     default_input: str = ""
     default_output: str = ""
 
@@ -129,6 +132,7 @@ class BasePanel(QWidget):
         self._selected_type: str = ""
         self._type_buttons: dict = {}
         self._path_state: dict[str, tuple[str, str]] = {}
+        self._scatter_manifest_by_type: dict[str, Path] = {}
         self._type_button_group: QButtonGroup = None
         self.init_ui()
         self._apply_operation_ui(self._selected_type)
@@ -232,6 +236,22 @@ class BasePanel(QWidget):
     def _build_action_buttons(self) -> QHBoxLayout:
         hbox = QHBoxLayout()
         hbox.addStretch()
+        self.scatter_btn = QPushButton("📊 FT 散点图")
+        self.scatter_btn.setMinimumHeight(50)
+        self.scatter_btn.setMinimumWidth(210)
+        self.scatter_btn.setEnabled(False)
+        self.scatter_btn.setVisible(bool(self.scatter_supported_types))
+        self.scatter_btn.setToolTip("请先完成一次支持散点图的 FT 数据清洗")
+        self.scatter_btn.clicked.connect(self._open_scatter)
+        self.scatter_btn.setStyleSheet(
+            "QPushButton{background:#2563eb;color:#ffffff;font-size:20px;"
+            "border-radius:10px;padding:10px 22px;}"
+            "QPushButton:hover{background:#1d4ed8;}"
+            "QPushButton:pressed{background:#1e40af;}"
+            "QPushButton:disabled{background:#9fb7d9;color:#eef5ff;}"
+        )
+        hbox.addWidget(self.scatter_btn)
+        hbox.addSpacing(14)
         self.start_btn = QPushButton("🚀 开始清洗")
         self.start_btn.setMinimumHeight(50)
         self.start_btn.setMinimumWidth(250)
@@ -386,6 +406,9 @@ class BasePanel(QWidget):
             return
 
         self.status_text.clear()
+        if self._selected_type in self.scatter_supported_types:
+            self._scatter_manifest_by_type.pop(self._selected_type, None)
+            self.scatter_btn.setEnabled(False)
         self.start_btn.setEnabled(False)
         self.start_btn.setText("处理中...")
 
@@ -408,6 +431,16 @@ class BasePanel(QWidget):
         self.start_btn.setEnabled(True)
         self.start_btn.setText(self._action_text_for(self._selected_type))
         if success:
+            result = getattr(self.worker, "result", None)
+            manifest = getattr(result, "scatter_manifest", None)
+            if manifest:
+                manifest_path = Path(manifest).resolve()
+                if manifest_path.is_file():
+                    self._scatter_manifest_by_type[self._selected_type] = manifest_path
+                    self.scatter_btn.setEnabled(True)
+                    self.scatter_btn.setToolTip(str(manifest_path))
+                    self._log("📊 散点图数据已准备完成，可点击“FT 散点图”")
+                    msg += "\n\n散点图数据已准备完成，请点击“FT 散点图”。"
             QMessageBox.information(self, "完成", msg)
         else:
             QMessageBox.warning(self, "失败", msg)
@@ -417,6 +450,23 @@ class BasePanel(QWidget):
         self.start_btn.setEnabled(True)
         self.start_btn.setText(self._action_text_for(self._selected_type))
         QMessageBox.critical(self, "错误", err)
+
+    def _open_scatter(self):
+        manifest = self._scatter_manifest_by_type.get(self._selected_type)
+        if not manifest or not manifest.is_file():
+            QMessageBox.warning(self, "提示", "请先完成一次日月新 DC 数据清洗")
+            return
+        try:
+            from gui.scatter_launcher import launch_ft_scatter
+
+            url = launch_ft_scatter(manifest)
+            self._log(f"已打开 FT 散点图: {url}")
+        except Exception as exc:
+            QMessageBox.critical(
+                self,
+                "散点图启动失败",
+                f"{exc}\n\n请确认已安装 requirements.txt 中的 Streamlit 和 Plotly。",
+            )
 
     def _log(self, msg: str):
         ts = datetime.now().strftime("%H:%M:%S")
@@ -464,6 +514,12 @@ class BasePanel(QWidget):
             self.input_browse_btn.setText("选择文件夹...")
         if hasattr(self, "start_btn"):
             self.start_btn.setText(self._action_text_for(data_type))
+        if hasattr(self, "scatter_btn"):
+            supported = data_type in self.scatter_supported_types
+            self.scatter_btn.setVisible(supported)
+            self.scatter_btn.setEnabled(
+                supported and data_type in self._scatter_manifest_by_type
+            )
 
     def _action_text_for(self, data_type: str) -> str:
         if data_type in self.pat_analysis_types or data_type == "PAT":

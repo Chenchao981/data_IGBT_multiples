@@ -56,7 +56,80 @@ class DCDataCleaner:
         """
         self.input_dir = Path(input_dir)
         self.output_dir = Path(output_dir)
+        self.last_output_file: Optional[Path] = None
+        self.last_scatter_manifest: Optional[Path] = None
+        self._parsed_specs: Dict[Path, pd.DataFrame] = {}
+        self._parsed_source_ids: Dict[Path, str] = {}
         self.ensure_output_dir()
+
+    @staticmethod
+    def _source_id(file_path: Path) -> str:
+        """Return the tester/source identifier at the start of an ASE filename."""
+        return file_path.stem.split("_", 1)[0].strip() or file_path.stem
+
+    @staticmethod
+    def _raw_cell_text(value) -> str:
+        if pd.isna(value):
+            return ""
+        if isinstance(value, float) and value.is_integer():
+            return str(int(value))
+        return str(value).strip()
+
+    @classmethod
+    def _parse_limit_value(cls, value) -> Optional[float]:
+        """Parse the displayed numeric part without changing the source unit."""
+        text = cls._raw_cell_text(value)
+        if not text:
+            return None
+        match = re.search(r"[+-]?(?:\d+(?:\.\d*)?|\.\d+)(?:[Ee][+-]?\d+)?", text)
+        return float(match.group(0)) if match else None
+
+    @classmethod
+    def _format_test_condition(cls, *values) -> str:
+        conditions = []
+        for value in values:
+            text = cls._raw_cell_text(value)
+            if not text or text.lower() == "nan" or text in {"0", "0.0"}:
+                continue
+            text = re.sub(r"^\(([^)]+)\)\s*", r"\1=", text)
+            conditions.append(text)
+        return "; ".join(conditions)
+
+    def _capture_scatter_specs(
+        self,
+        source_df: pd.DataFrame,
+        file_path: Path,
+        lot_id: str,
+        final_params: List[Tuple[int, str]],
+    ) -> None:
+        """Capture limits and conditions while the original workbook is in memory."""
+        source_id = self._source_id(file_path)
+        records = []
+        for column_index, parameter in final_params:
+            low_raw = self._raw_cell_text(source_df.iat[2, column_index])
+            high_raw = self._raw_cell_text(source_df.iat[3, column_index])
+            bias1 = self._raw_cell_text(source_df.iat[4, column_index])
+            bias2 = self._raw_cell_text(source_df.iat[5, column_index])
+            unit = self._raw_cell_text(source_df.iat[6, column_index])
+            records.append(
+                {
+                    "Source_ID": source_id,
+                    "lot_ID": lot_id,
+                    "Parameter": parameter,
+                    "Unit": "" if unit in {"0", "0.0"} else unit,
+                    "Low_Limit": self._parse_limit_value(low_raw),
+                    "High_Limit": self._parse_limit_value(high_raw),
+                    "Low_Limit_Raw": low_raw,
+                    "High_Limit_Raw": high_raw,
+                    "Bias1": bias1,
+                    "Bias2": bias2,
+                    "Test_Condition": self._format_test_condition(bias1, bias2),
+                    "Source_File": file_path.name,
+                }
+            )
+        key = file_path.resolve()
+        self._parsed_source_ids[key] = source_id
+        self._parsed_specs[key] = pd.DataFrame.from_records(records)
         
     def ensure_output_dir(self):
         """确保输出目录存在"""
@@ -160,6 +233,9 @@ class DCDataCleaner:
             DataFrame包含动态数量的测试参数和文件名，失败返回None
         """
         logger.info(f"开始处理文件: {file_path.name}")
+        key = file_path.resolve()
+        self._parsed_specs.pop(key, None)
+        self._parsed_source_ids.pop(key, None)
         
         try:
             # 使用excel_utils中的快速读取函数
@@ -278,6 +354,9 @@ class DCDataCleaner:
                 logger.debug(f"最终参数: 列{col} -> {final_param_name}")
             
             logger.debug(f"最终参数列表: {[param[1] for param in final_params]}")
+
+            # Low Limit 与 High Limit 按源文件业务含义原样记录，不交换、不猜测。
+            self._capture_scatter_specs(df, file_path, lot_id, final_params)
             
             # 6. 快速定位Test No.行
             test_no_loc = np.where(df.map(lambda x: isinstance(x, str) and "Test No" in x))
@@ -415,6 +494,7 @@ class DCDataCleaner:
             success = write_excel_fast(df, output_file, sheet_name='DC_Data')
             
             if success:
+                self.last_output_file = output_file.resolve()
                 logger.info(f"DC数据保存成功: {output_file}")
                 logger.info(f"总共处理 {len(df)} 行数据")
             else:
@@ -434,6 +514,10 @@ class DCDataCleaner:
             处理是否成功
         """
         logger.info("=" * 50)
+        self.last_output_file = None
+        self.last_scatter_manifest = None
+        self._parsed_specs.clear()
+        self._parsed_source_ids.clear()
         logger.info("开始DC数据清洗处理 (性能优化版)")
         logger.info("=" * 50)
         
@@ -446,10 +530,18 @@ class DCDataCleaner:
             
             # 2. 提取每个文件的数据
             all_data_frames = []
+            all_spec_frames = []
             for file_path in dc_files:
                 df = self.extract_dc_data(file_path)
                 if df is not None and not df.empty:
+                    key = file_path.resolve()
+                    source_id = self._parsed_source_ids.get(key, self._source_id(file_path))
+                    df = df.copy()
+                    df.insert(1, "_source_id", source_id)
                     all_data_frames.append(df)
+                    specs = self._parsed_specs.get(key)
+                    if specs is not None and not specs.empty:
+                        all_spec_frames.append(specs)
             
             if not all_data_frames:
                 logger.error("没有成功提取到任何数据")
@@ -467,8 +559,32 @@ class DCDataCleaner:
                 logger.error("数据清洗失败")
                 return False
             
-            # 5. 保存结果
-            success = self.save_dc_result(cleaned_df)
+            # 5. 保存原有清洗结果。内部来源列不进入既有 DC_Data Excel 合同。
+            excel_df = cleaned_df.drop(columns=["_source_id"], errors="ignore")
+            success = self.save_dc_result(excel_df)
+
+            # 6. 直接使用内存中的清洗数据和源规格生成散点图数据包。
+            if success:
+                try:
+                    if not all_spec_frames:
+                        raise ValueError("没有从源文件读取到测试参数上下限")
+                    from frontend.ft_scatter import export_scatter_bundle
+
+                    scatter_df = cleaned_df.rename(columns={"_source_id": "Source_ID"})
+                    scatter_df = scatter_df[["NUM", "lot_ID", "Source_ID"] + [
+                        column for column in excel_df.columns if column not in {"NUM", "lot_ID"}
+                    ]]
+                    spec_df = pd.concat(all_spec_frames, ignore_index=True, sort=False)
+                    self.last_scatter_manifest = export_scatter_bundle(
+                        scatter_df,
+                        spec_df,
+                        self.last_output_file.parent,
+                        cleaned_file=self.last_output_file,
+                    ).resolve()
+                    logger.info(f"FT散点图数据包生成成功: {self.last_scatter_manifest}")
+                except Exception as exc:
+                    logger.error(f"FT散点图数据包生成失败: {exc}", exc_info=True)
+                    return False
             
             if success:
                 logger.info("=" * 50)

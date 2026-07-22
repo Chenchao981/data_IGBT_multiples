@@ -8,7 +8,7 @@
 
 | 封装厂 | 数据格式 | 数据处理 | 状态 |
 |--------|----------|----------|------|
-| **日月新 (ASE)** | .xlsx 分目录 | DC / DVDS / RG | ✅ 稳定 |
+| **日月新 (ASE)** | .xlsx 分目录 | DC / FT散点图 / DVDS / RG | ✅ 稳定 |
 | **杰群 批次1** | .csv 分目录 | DC / DVDS / RG | ✅ 稳定 |
 | **杰群 批次2** | .csv 统一CSV | DC+DVDS+RG 合并 | ✅ 稳定 |
 | **杰群 第三产线** | .csv 产品目录平铺、可变尾空列 | DC | ✅ 可用 |
@@ -55,6 +55,10 @@ data_IGBT_multiple/
 ├── shared/
 │   └── excel_utils.py              ← Excel/CSV 读写工具（.xls/.xlsx/.csv）
 │
+├── frontend/
+│   ├── ft_scatter.py               ← 散点图数据包与 Plotly 图形逻辑
+│   └── ft_scatter_app.py           ← Streamlit 单页多参数前端
+│
 ├── gui/
 │   ├── main_window.py              ← ★ 侧边栏主窗口（选厂 + 面板切换）
 │   ├── start_gui.bat
@@ -82,6 +86,17 @@ data_IGBT_multiple/
 ```bash
 python gui/main_window.py
 ```
+
+### 日月新 DC 散点图
+
+1. 选择“日月新”与“DC”，选择原始数据目录和输出目录后点击“开始清洗”。
+2. 清洗成功后，“FT 散点图”按钮自动启用；点击后打开浏览器页面。
+3. 页面按清洗结果的参数顺序展示，一个参数一张图；X 轴为 `C1（测试序号）`，Y 轴为参数值。
+4. LSL/USL 分别直接取源文件 `Low Limit` / `High Limit`，并保留原始文本、Bias 条件和来源文件。
+
+清洗阶段利用已经读入内存的数据，同时生成 `ft_scatter_data.csv.gz`、
+`ft_scatter_spec.csv` 和 `ft_scatter_manifest.json`。点击散点图时读取该次输出目录中的明确清单，
+不会重新扫描原始 Excel，也不会猜测“最新文件”。单图默认最多显示 8,000 个点，但全部超限点始终保留。
 
 ### 杰群面板说明
 
@@ -351,9 +366,12 @@ python gui/main_window.py
 | python-calamine | 快速 Excel 读取 |
 | xlsxwriter | 快速 Excel 写入 |
 | PyQt5 | GUI 界面 |
+| Plotly | FT 参数散点图 |
+| Streamlit | 本地散点图页面 |
 
 ## 🔄 版本历史
 
+- **v2.7.0** (2026-07-22)：新增日月新 DC 的两阶段 FT 散点图流程；清洗时从源文件读取 `Low Limit` / `High Limit` 并生成便携数据包，清洗后由 GUI 按钮打开每参数一图的深色 Plotly 页面，保留全部超限点。
 - **v2.6.2** (2026-07-21)：新增电基 PAT 参数分析；读取一个或多个清洗结果的 `RAW/RAW_n` Sheet，并与日月新共用 IQR/1.35、围绕中位数 ±6Sigma 的算法和 PAT 输出格式。
 - **v2.6.1** (2026-07-21)：电基 `FT-ALL` 兼容已验证的 `M/R` 制造批次、周记标点和无标签时间命名；制造主批和周记一致时允许测试机 `Lot` 片号后缀未刷新并输出 WARNING，其他身份冲突仍严格停止。
 - **v2.6.0** (2026-07-20)：新增电基 PowerTECH `FT-ALL` 清洗；支持伪 `.xls` 文本、动态周记/偏置参数命名、提前失效空值保留、`9999` 占位清理、`RAW` 标准输出及 GUI/发布包入口。

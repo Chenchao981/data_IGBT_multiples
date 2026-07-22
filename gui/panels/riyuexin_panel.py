@@ -10,6 +10,7 @@ project_root = Path(__file__).resolve().parent.parent.parent
 sys.path.append(str(project_root))
 
 from gui.panels.base_panel import BasePanel
+from gui.operation_result import OperationResult
 from factories.riyuexin.config import FACTORY_NAME, DATA_TYPES
 
 
@@ -18,6 +19,7 @@ class RiyuexinPanel(BasePanel):
     data_types = DATA_TYPES
     pat_analysis_types = ["PAT"]
     yield_analysis_types = ["SYL&SBL"]
+    scatter_supported_types = ["DC"]
     default_input = str(Path.home() / "Desktop")
     default_output = str(Path.home() / "Desktop")
 
@@ -31,7 +33,17 @@ class RiyuexinPanel(BasePanel):
 
         if data_type == "DC":
             from factories.riyuexin.dc_cleaner import DCDataCleaner
-            return lambda: DCDataCleaner(input_dir=inp, output_dir=out).process_all_dc_files()
+
+            def _run_dc():
+                cleaner = DCDataCleaner(input_dir=inp, output_dir=out)
+                success = cleaner.process_all_dc_files()
+                return OperationResult(
+                    success=success,
+                    output_file=cleaner.last_output_file,
+                    scatter_manifest=cleaner.last_scatter_manifest,
+                )
+
+            return _run_dc
 
         elif data_type == "DVDS":
             from factories.riyuexin.dvds_cleaner import DVDSCleaner
