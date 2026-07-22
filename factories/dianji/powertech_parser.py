@@ -68,14 +68,15 @@ class ParsedPowerTechFile:
     invalid_marker_counts: dict[str, int]
 
 
+_BATCH_PATTERN = r"(?:[cC]\d{6}[.,，。]\d{2}|[fF][aA]\d{2}-\d{4})"
 _FILENAME_RE = re.compile(
     r"^(?P<product>.+)_(?P<manufacturing_lot>[mMrR]\d{9}-\d{3})\s+"
-    r"(?P<batch>[cC]\d{6}[.,，。]\d{2})\s*"
+    rf"(?P<batch>{_BATCH_PATTERN})\s*"
     r"(?P<test_tag>(?:[A-Za-z]+)?\d{12})$"
 )
 _LOT_RE = re.compile(
     r"(?P<manufacturing_lot>[mMrR]\d{9}-\d{3})\s+"
-    r"(?P<batch>[cC]\d{6}[.,，。]\d{2})"
+    rf"(?P<batch>{_BATCH_PATTERN})"
 )
 _ITEM_RE = re.compile(r"^(?P<number>\d+)\s+(?P<name>.+?)\s*$")
 
@@ -86,7 +87,8 @@ def parse_dianji_filename(path_or_name: str | Path) -> FileIdentity:
     match = _FILENAME_RE.fullmatch(stem)
     if not match:
         raise DianjiFormatError(
-            "电基文件名不符合 '<产品>_<M/R制造批次> <周记>[标签]<测试时间>.xls' 规则: "
+            "电基文件名不符合 '<产品>_<M/R制造批次> <C...周记/FA...批次>"
+            "[标签]<测试时间>.xls' 规则: "
             f"{Path(path_or_name).name}"
         )
     return FileIdentity(
@@ -225,7 +227,7 @@ def _validate_metadata_lot(
 
     warning = (
         f"{path.name} 的 Lot 片号后缀未刷新: filename={expected}, Lot={lot_text}；"
-        f"制造主批 {filename_main_lot} 和周记 {identity.batch} 一致，已按文件名继续"
+        f"制造主批 {filename_main_lot} 和批次标识 {identity.batch} 一致，已按文件名继续"
     )
     return lot_text, warning
 

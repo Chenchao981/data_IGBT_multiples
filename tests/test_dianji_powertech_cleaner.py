@@ -174,6 +174,10 @@ class DianjiFilenameTests(unittest.TestCase):
                 "TESTPRODUCT-7E00_R251225027-001 C152722,00 ALL260102090022.xls",
                 "R251225027-001", "C152722.00", "ALL260102090022",
             ),
+            (
+                "TESTPRODUCT-7E00_m260604005-001 fa65-5405 ALL260705044541.xls",
+                "M260604005-001", "FA65-5405", "ALL260705044541",
+            ),
         )
         for filename, manufacturing_lot, batch, test_tag in cases:
             with self.subTest(filename=filename):
@@ -181,6 +185,12 @@ class DianjiFilenameTests(unittest.TestCase):
                 self.assertEqual(identity.manufacturing_lot, manufacturing_lot)
                 self.assertEqual(identity.batch, batch)
                 self.assertEqual(identity.test_tag, test_tag)
+
+    def test_rejects_unverified_batch_pattern(self):
+        with self.assertRaisesRegex(DianjiFormatError, "电基文件名不符合"):
+            parse_dianji_filename(
+                "TESTPRODUCT-7E00_M260604005-001 FB65-5405 ALL260705044541.xls"
+            )
 
 
 class PowerTechParserTests(unittest.TestCase):
@@ -261,6 +271,21 @@ class PowerTechParserTests(unittest.TestCase):
         self.assertEqual(parsed.identity.batch, "C152722.00")
         self.assertIsNone(parsed.lot_identity_warning)
         self.assertEqual(parsed.data["批次"].unique().tolist(), ["C152722.00"])
+
+    def test_accepts_verified_fa_batch_in_filename_and_lot_metadata(self):
+        with tempfile.TemporaryDirectory() as temp:
+            parsed = parse_powertech_file(
+                _make_source(
+                    Path(temp),
+                    manufacturing_lot="m260604005-001",
+                    batch="fa65-5405",
+                )
+            )
+
+        self.assertEqual(parsed.identity.manufacturing_lot, "M260604005-001")
+        self.assertEqual(parsed.identity.batch, "FA65-5405")
+        self.assertIsNone(parsed.lot_identity_warning)
+        self.assertEqual(parsed.data["批次"].unique().tolist(), ["FA65-5405"])
 
     def test_rejects_lot_mismatch_outside_piece_suffix(self):
         cases = (

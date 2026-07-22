@@ -80,7 +80,7 @@ class DianjiDCCleaner(BaseCleaner):
             if parsed.lot_identity_warning:
                 logger.warning("%s", parsed.lot_identity_warning)
             logger.info(
-                "已解析 %s: 源记录=%s, 保留=%s, 周记=%s",
+                "已解析 %s: 源记录=%s, 保留=%s, 批次=%s",
                 path.name,
                 parsed.source_rows,
                 parsed.kept_rows,
