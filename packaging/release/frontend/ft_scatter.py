@@ -14,7 +14,8 @@ import pandas as pd
 
 
 IDENTIFIER_COLUMNS = {"NUM", "lot_ID", "Source_ID"}
-DEFAULT_POINT_LIMIT = 8_000
+DEFAULT_POINT_LIMIT = 4_000
+DEFAULT_DUPLICATE_LIMIT = 32
 
 
 def _relative_path(target: Path, base: Path) -> str:
@@ -69,6 +70,7 @@ def export_scatter_bundle(
         "row_count": int(len(data)),
         "parameters": parameters,
         "sources": [str(value) for value in data["Source_ID"].dropna().drop_duplicates()],
+        "lots": [str(value) for value in data["lot_ID"].dropna().drop_duplicates()],
     }
     manifest_file.write_text(
         json.dumps(manifest, ensure_ascii=False, indent=2), encoding="utf-8"
@@ -128,8 +130,14 @@ def prepare_parameter_points(
     parameter: str,
     *,
     point_limit: int = DEFAULT_POINT_LIMIT,
+    max_duplicate_points: int = DEFAULT_DUPLICATE_LIMIT,
 ) -> tuple[pd.DataFrame, dict]:
-    """Return display points while retaining every out-of-spec observation."""
+    """Return representative display points while retaining every OOS point.
+
+    In-spec rows with the same lot and exact measurement value are visually
+    indistinguishable except for their X position.  Keep evenly distributed
+    representatives from each such group before applying the overall cap.
+    """
     if parameter not in data.columns:
         raise KeyError(parameter)
 
@@ -141,29 +149,38 @@ def prepare_parameter_points(
     relevant_specs = specs.loc[specs["Parameter"] == parameter].copy()
     for column in ("Low_Limit", "High_Limit"):
         relevant_specs[column] = pd.to_numeric(relevant_specs[column], errors="coerce")
-    limit_lookup = (
-        relevant_specs.drop_duplicates("Source_ID", keep="last")
-        .set_index("Source_ID")[["Low_Limit", "High_Limit"]]
-        .to_dict("index")
+    limit_table = relevant_specs.drop_duplicates("Source_ID", keep="last").copy()
+    limit_table["_source_key"] = limit_table["Source_ID"].astype(str)
+    limit_table.set_index("_source_key", inplace=True)
+    source_keys = points["Source_ID"].astype(str)
+    low_limits = source_keys.map(limit_table["Low_Limit"])
+    high_limits = source_keys.map(limit_table["High_Limit"])
+    points["_oos"] = (
+        (low_limits.notna() & points[parameter].lt(low_limits))
+        | (high_limits.notna() & points[parameter].gt(high_limits))
     )
-
-    def is_oos(row) -> bool:
-        limits = limit_lookup.get(str(row["Source_ID"]), {})
-        low = limits.get("Low_Limit")
-        high = limits.get("High_Limit")
-        value = row[parameter]
-        return bool((pd.notna(low) and value < low) or (pd.notna(high) and value > high))
-
-    points["_oos"] = points.apply(is_oos, axis=1)
     oos = points.loc[points["_oos"]]
     in_spec = points.loc[~points["_oos"]]
+    if max_duplicate_points > 0 and not in_spec.empty:
+        groups = in_spec.groupby(["lot_ID", parameter], sort=False, dropna=False)
+        group_sizes = groups[parameter].transform("size")
+        group_positions = groups.cumcount()
+        current_bucket = group_positions.mul(max_duplicate_points).floordiv(group_sizes)
+        previous_bucket = (
+            group_positions.sub(1).mul(max_duplicate_points).floordiv(group_sizes)
+        )
+        keep = group_sizes.le(max_duplicate_points) | current_bucket.ne(previous_bucket)
+        compact_in_spec = in_spec.loc[keep]
+    else:
+        compact_in_spec = in_spec
     allowance = max(point_limit - len(oos), 0)
-    sampled = _even_sample(in_spec, allowance)
+    sampled = _even_sample(compact_in_spec, allowance)
     displayed = pd.concat([oos, sampled], ignore_index=False).sort_values("NUM", kind="stable")
     stats = {
         "valid_count": int(len(points)),
         "display_count": int(len(displayed)),
         "oos_count": int(len(oos)),
+        "duplicate_reduction_count": int(len(in_spec) - len(compact_in_spec)),
         "point_limit": int(point_limit),
     }
     return displayed, stats
@@ -213,9 +230,9 @@ def build_parameter_figure(
     figure = go.Figure()
     palette = ["#4da3ff", "#20c77a", "#ff9f1c", "#9b59b6", "#f05d5e", "#38bdf8"]
 
-    sources = [str(value) for value in data["Source_ID"].dropna().drop_duplicates()]
-    for index, source in enumerate(sources):
-        group = displayed.loc[displayed["Source_ID"].astype(str) == source]
+    lots = [str(value) for value in data["lot_ID"].dropna().drop_duplicates()]
+    for index, lot_id in enumerate(lots):
+        group = displayed.loc[displayed["lot_ID"].astype(str) == lot_id]
         if group.empty:
             continue
         figure.add_trace(
@@ -223,12 +240,12 @@ def build_parameter_figure(
                 x=group["NUM"],
                 y=group[parameter],
                 mode="markers",
-                name=source,
+                name=lot_id,
                 marker={"size": 5, "color": palette[index % len(palette)], "opacity": 0.78},
-                customdata=group[["lot_ID", "Source_ID", "_oos"]],
+                customdata=group[["_oos"]],
                 hovertemplate=(
-                    "C1=%{x}<br>数值=%{y}<br>Lot=%{customdata[0]}"
-                    "<br>来源=%{customdata[1]}<br>超限=%{customdata[2]}<extra></extra>"
+                    "C1=%{x}<br>数值=%{y}<br>批次=%{fullData.name}"
+                    "<br>超限=%{customdata[0]}<extra></extra>"
                 ),
             )
         )
@@ -250,8 +267,9 @@ def build_parameter_figure(
                 source_rows = data.loc[data["Source_ID"].astype(str) == str(spec["Source_ID"])]
                 if source_rows.empty:
                     continue
+                lot_label = str(spec.get("lot_ID", "")).strip() or str(spec["Source_ID"])
                 segments.append(
-                    (float(source_rows["NUM"].min()), float(source_rows["NUM"].max()), spec[column], f"{label} {spec['Source_ID']}")
+                    (float(source_rows["NUM"].min()), float(source_rows["NUM"].max()), spec[column], f"{label} {lot_label}")
                 )
         for start, end, value, segment_label in segments:
             figure.add_trace(
@@ -269,19 +287,27 @@ def build_parameter_figure(
             )
 
     figure.update_layout(
-        title={"text": parameter_title(specs, parameter), "x": 0.01, "xanchor": "left"},
+        title={"text": f"<b>{parameter_title(specs, parameter)}</b>", "x": 0.01, "xanchor": "left"},
         paper_bgcolor="#182737",
         plot_bgcolor="#132231",
         font={"color": "#cbd5e1", "size": 12},
         height=560,
-        margin={"l": 70, "r": 95, "t": 70, "b": 70},
-        legend={"orientation": "v", "x": 1.01, "y": 1},
+        margin={"l": 70, "r": 55, "t": 105, "b": 70},
+        showlegend=True,
+        legend={
+            "title": {"text": "批次"},
+            "orientation": "h",
+            "x": 0,
+            "y": 1.12,
+            "xanchor": "left",
+            "yanchor": "bottom",
+        },
         hovermode="closest",
     )
     figure.add_annotation(
         text=parameter_limit_summary(specs, parameter),
         x=1,
-        y=1.08,
+        y=1.02,
         xref="paper",
         yref="paper",
         xanchor="right",
@@ -297,7 +323,7 @@ def build_parameter_figure(
         linecolor="#496174",
     )
     figure.update_yaxes(
-        title=parameter,
+        title="",
         gridcolor="#2b4255",
         zeroline=False,
         showline=True,

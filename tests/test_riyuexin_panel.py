@@ -55,6 +55,17 @@ class RiyuexinPanelScatterTests(unittest.TestCase):
             self.assertFalse(self.panel.scatter_btn.isHidden())
             self.assertTrue(self.panel.scatter_btn.isEnabled())
 
+    def test_action_order_is_clean_first_then_scatter(self):
+        action_layout = self.panel.layout().itemAt(2).layout()
+        widgets = [
+            action_layout.itemAt(index).widget()
+            for index in range(action_layout.count())
+            if action_layout.itemAt(index).widget() is not None
+        ]
+        self.assertLess(
+            widgets.index(self.panel.start_btn), widgets.index(self.panel.scatter_btn)
+        )
+
 
 if __name__ == "__main__":
     unittest.main()

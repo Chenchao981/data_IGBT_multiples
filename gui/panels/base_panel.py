@@ -250,8 +250,6 @@ class BasePanel(QWidget):
             "QPushButton:pressed{background:#1e40af;}"
             "QPushButton:disabled{background:#9fb7d9;color:#eef5ff;}"
         )
-        hbox.addWidget(self.scatter_btn)
-        hbox.addSpacing(14)
         self.start_btn = QPushButton("🚀 开始清洗")
         self.start_btn.setMinimumHeight(50)
         self.start_btn.setMinimumWidth(250)
@@ -263,7 +261,10 @@ class BasePanel(QWidget):
             "QPushButton:pressed{background:#e85d75;}"
             "QPushButton:disabled{background:#e8b9c5;color:#fff5f7;}"
         )
+        # 用户按从左到右的业务顺序操作：先清洗，再打开散点图。
         hbox.addWidget(self.start_btn)
+        hbox.addSpacing(14)
+        hbox.addWidget(self.scatter_btn)
         hbox.addStretch()
         return hbox
 

@@ -52,9 +52,13 @@ except Exception as exc:
 st.title(f"{manifest.get('factory', 'FT')} {manifest.get('data_type', '')} 参数散点图")
 st.markdown(
     f"<div class='scatter-summary'>数据行数：{len(data):,} ｜ 来源文件：{len(manifest.get('sources', []))} "
-    f"｜ 参数：{len(manifest.get('parameters', []))}</div>",
+    f"｜ 批次：{data['lot_ID'].nunique()} ｜ 参数：{len(manifest.get('parameters', []))}</div>",
     unsafe_allow_html=True,
 )
+
+if not manifest.get("parameters", []):
+    st.error("当前清洗结果没有可显示的测试参数。")
+    st.stop()
 
 for parameter in manifest.get("parameters", []):
     try:
@@ -63,10 +67,12 @@ for parameter in manifest.get("parameters", []):
             figure,
             use_container_width=True,
             config={"displaylogo": False, "scrollZoom": True, "responsive": True},
+            key=f"ft_scatter_{parameter}",
         )
         st.caption(
-            f"有效点 {stats['valid_count']:,} ｜ 显示点 {stats['display_count']:,} "
-            f"｜ 超限点 {stats['oos_count']:,}"
+            f"有效点 {stats['valid_count']:,} ｜ 实际绘制 {stats['display_count']:,} "
+            f"｜ 重复点优化 {stats['duplicate_reduction_count']:,} "
+            f"｜ 超限点 {stats['oos_count']:,}（全部保留）"
         )
     except Exception as exc:
         st.warning(f"{parameter} 生成失败：{exc}")
