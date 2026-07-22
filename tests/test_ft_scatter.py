@@ -65,8 +65,19 @@ class FTScatterBundleTests(unittest.TestCase):
             self.assertEqual(figure.layout.annotations[0].text, "LSL 1.3 ｜ USL 2.2")
             marker_traces = [trace for trace in figure.data if trace.mode == "markers"]
             self.assertEqual([trace.name for trace in marker_traces], ["LOT-A", "LOT-B"])
-            self.assertEqual(figure.layout.legend.orientation, "h")
+            self.assertEqual([trace.marker.size for trace in marker_traces], [7, 7])
+            self.assertNotEqual(marker_traces[0].marker.color, marker_traces[1].marker.color)
+            self.assertEqual(figure.layout.legend.orientation, "v")
+            self.assertGreater(figure.layout.legend.x, 1)
             self.assertEqual(figure.layout.legend.title.text, "批次")
+            self.assertEqual(figure.layout.legend.font.size, 15)
+            self.assertEqual(figure.layout.title.font.size, 22)
+            self.assertEqual(figure.layout.font.size, 15)
+            self.assertEqual(figure.layout.xaxis.tickfont.size, 15)
+            self.assertEqual(figure.layout.yaxis.tickfont.size, 15)
+            self.assertEqual(figure.layout.paper_bgcolor, "#ffffff")
+            self.assertEqual(figure.layout.plot_bgcolor, "#f8fafc")
+            self.assertEqual(figure.layout.annotations[0].font.size, 14)
             self.assertGreaterEqual(len(figure.data), 4)
 
             no_lsl = specs.copy()
@@ -103,6 +114,55 @@ class FTScatterBundleTests(unittest.TestCase):
         self.assertEqual(stats["oos_count"], 3)
         self.assertEqual(stats["display_count"], 8)
         self.assertEqual(int(displayed["_oos"].sum()), 3)
+
+    def test_small_lot_is_retained_by_stratified_sampling(self):
+        data = pd.DataFrame(
+            {
+                "NUM": range(1, 5_002),
+                "lot_ID": ["LOT-A"] * 5_000 + ["LOT-B"],
+                "Source_ID": ["NCT1"] * 5_000 + ["NCT2"],
+                "P": [float(value) for value in range(5_000)] + [2_500.5],
+            }
+        )
+        specs = pd.DataFrame(
+            {
+                "Source_ID": ["NCT1", "NCT2"],
+                "Parameter": ["P", "P"],
+                "Low_Limit": [None, None],
+                "High_Limit": [None, None],
+            }
+        )
+
+        displayed, stats = prepare_parameter_points(data, specs, "P", point_limit=4_000)
+
+        self.assertEqual(stats["display_count"], 4_000)
+        self.assertEqual(displayed["lot_ID"].drop_duplicates().tolist(), ["LOT-A", "LOT-B"])
+        self.assertEqual(int(displayed["lot_ID"].eq("LOT-B").sum()), 1)
+
+    def test_seventeen_lots_have_distinct_scatter_colors_and_legend_entries(self):
+        lots = [f"LOT-{index}" for index in range(17)]
+        data = pd.DataFrame(
+            {
+                "NUM": range(1, 18),
+                "lot_ID": lots,
+                "Source_ID": [f"NCT-{index}" for index in range(17)],
+                "P": [float(index) for index in range(17)],
+            }
+        )
+        specs = pd.DataFrame(
+            {
+                "Source_ID": data["Source_ID"],
+                "Parameter": ["P"] * 17,
+                "Low_Limit": [None] * 17,
+                "High_Limit": [None] * 17,
+            }
+        )
+
+        figure, _ = build_parameter_figure(data, specs, "P")
+        marker_traces = [trace for trace in figure.data if trace.mode == "markers"]
+
+        self.assertEqual([trace.name for trace in marker_traces], lots)
+        self.assertEqual(len({trace.marker.color for trace in marker_traces}), 17)
 
 
 if __name__ == "__main__":

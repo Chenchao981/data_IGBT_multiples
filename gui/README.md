@@ -14,7 +14,7 @@ python gui/main_window.py
 python packaging/release/ft_data_cleaner.pyz
 ```
 
-GUI 入口是 `gui.main_window:main`，版本为 2.7.1。
+GUI 入口是 `gui.main_window:main`，版本为 2.7.2。
 
 ## 界面结构
 
@@ -29,8 +29,9 @@ GUI 入口是 `gui.main_window:main`，版本为 2.7.1。
 - 操作按钮按业务顺序排列：左侧“开始清洗”，右侧“FT 散点图”。
 - 清洗器利用内存中的清洗数据生成散点图数据包，不重复读取原始 Excel。
 - 页面一次展示全部参数图；参数名称位于坐标轴上方，Y 轴左侧不再重复参数名。
-- 颜色和顶部图例按 `lot_ID` 批次区分。
-- 规格内重复值均匀压缩，全部超限点保留，以缩短页面打开时间。
+- 颜色按 `lot_ID` 批次区分，批次图例显示在图形右侧。
+- 页面采用亮色背景，散点、参数标题、坐标数字、批次图例及上下限标签均已放大。
+- 规格内重复值按批次分层压缩，每个有效批次保留代表点，全部超限点保留，以缩短页面打开时间。
 - `Low Limit` 和 `High Limit` 分别作为 LSL、USL；规格不同的来源文件按各自区间画线。
 - Streamlit 使用本机 `8502` 端口。发布包旁必须保留 `frontend/ft_scatter_app.py`。
 

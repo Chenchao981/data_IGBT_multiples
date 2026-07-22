@@ -14,7 +14,7 @@ import glob
 import fnmatch
 from pathlib import Path
 
-VERSION = '2.7.1'
+VERSION = '2.7.2'
 
 # --- Configuration ---
 # Project root
@@ -228,7 +228,8 @@ Notes:
 - Output files are saved under the selected output directory.
 - After ASE DC cleaning succeeds, click FT Scatter Chart to open one chart per parameter.
 - Scatter limits come directly from each source file's Low Limit and High Limit rows.
-- Scatter colors and the top legend identify lot_ID batches.
+- Scatter colors and the right-side legend identify lot_ID batches.
+- Scatter charts use a light theme with enlarged markers, axis numbers, titles, legends, and limit labels.
 - Dense repeated in-spec values are compacted for faster opening; every OOS point is retained.
 - Review the application log if processing fails.
 

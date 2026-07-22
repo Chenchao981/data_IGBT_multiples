@@ -16,6 +16,24 @@ import pandas as pd
 IDENTIFIER_COLUMNS = {"NUM", "lot_ID", "Source_ID"}
 DEFAULT_POINT_LIMIT = 4_000
 DEFAULT_DUPLICATE_LIMIT = 32
+LOT_COLORS = [
+    "#2563eb",
+    "#16a34a",
+    "#ea580c",
+    "#9333ea",
+    "#0891b2",
+    "#ca8a04",
+    "#475569",
+    "#0d9488",
+    "#4f46e5",
+    "#65a30d",
+    "#c026d3",
+    "#7c3aed",
+    "#0284c7",
+    "#15803d",
+    "#a16207",
+    "#334155",
+]
 
 
 def _relative_path(target: Path, base: Path) -> str:
@@ -124,6 +142,57 @@ def _even_sample(frame: pd.DataFrame, count: int) -> pd.DataFrame:
     return frame.iloc[positions]
 
 
+def _stratified_even_sample(
+    frame: pd.DataFrame, count: int, *, group_column: str
+) -> pd.DataFrame:
+    """Sample deterministically per group, retaining every non-empty group."""
+    if frame.empty or count <= 0:
+        return frame.iloc[0:0]
+    if len(frame) <= count:
+        return frame
+
+    groups = [group for _, group in frame.groupby(group_column, sort=False, dropna=False)]
+    count = min(len(frame), max(count, len(groups)))
+    allocations = [1] * len(groups)
+    remaining = count - len(groups)
+    capacities = [len(group) - 1 for group in groups]
+    total_capacity = sum(capacities)
+    if remaining > 0 and total_capacity > 0:
+        exact_extras = [remaining * capacity / total_capacity for capacity in capacities]
+        base_extras = [
+            min(capacity, int(extra))
+            for capacity, extra in zip(capacities, exact_extras)
+        ]
+        allocations = [base + extra for base, extra in zip(allocations, base_extras)]
+        leftover = remaining - sum(base_extras)
+        order = sorted(
+            range(len(groups)),
+            key=lambda index: (exact_extras[index] - base_extras[index], -index),
+            reverse=True,
+        )
+        for index in order:
+            if leftover <= 0:
+                break
+            if allocations[index] < len(groups[index]):
+                allocations[index] += 1
+                leftover -= 1
+
+    sampled_groups = [
+        _even_sample(group, allocation)
+        for group, allocation in zip(groups, allocations)
+    ]
+    return pd.concat(sampled_groups, ignore_index=False)
+
+
+def _lot_color(index: int) -> str:
+    if index < len(LOT_COLORS):
+        return LOT_COLORS[index]
+    hue = (211 + (index - len(LOT_COLORS)) * 137.508) % 360
+    if hue < 25 or hue > 340:
+        hue = (hue + 42) % 360
+    return f"hsl({hue:.1f}, 68%, 43%)"
+
+
 def prepare_parameter_points(
     data: pd.DataFrame,
     specs: pd.DataFrame,
@@ -136,7 +205,9 @@ def prepare_parameter_points(
 
     In-spec rows with the same lot and exact measurement value are visually
     indistinguishable except for their X position.  Keep evenly distributed
-    representatives from each such group before applying the overall cap.
+    representatives from each such group before applying a soft display cap.
+    The cap may be exceeded to retain every OOS point and at least one
+    representative point from each batch.
     """
     if parameter not in data.columns:
         raise KeyError(parameter)
@@ -174,7 +245,11 @@ def prepare_parameter_points(
     else:
         compact_in_spec = in_spec
     allowance = max(point_limit - len(oos), 0)
-    sampled = _even_sample(compact_in_spec, allowance)
+    in_spec_lot_count = compact_in_spec["lot_ID"].nunique(dropna=False)
+    sample_count = max(allowance, in_spec_lot_count)
+    sampled = _stratified_even_sample(
+        compact_in_spec, sample_count, group_column="lot_ID"
+    )
     displayed = pd.concat([oos, sampled], ignore_index=False).sort_values("NUM", kind="stable")
     stats = {
         "valid_count": int(len(points)),
@@ -228,8 +303,6 @@ def build_parameter_figure(
         data, specs, parameter, point_limit=point_limit
     )
     figure = go.Figure()
-    palette = ["#4da3ff", "#20c77a", "#ff9f1c", "#9b59b6", "#f05d5e", "#38bdf8"]
-
     lots = [str(value) for value in data["lot_ID"].dropna().drop_duplicates()]
     for index, lot_id in enumerate(lots):
         group = displayed.loc[displayed["lot_ID"].astype(str) == lot_id]
@@ -241,7 +314,12 @@ def build_parameter_figure(
                 y=group[parameter],
                 mode="markers",
                 name=lot_id,
-                marker={"size": 5, "color": palette[index % len(palette)], "opacity": 0.78},
+                marker={
+                    "size": 7,
+                    "color": _lot_color(index),
+                    "opacity": 0.82,
+                    "line": {"color": "rgba(255,255,255,0.75)", "width": 0.35},
+                },
                 customdata=group[["_oos"]],
                 hovertemplate=(
                     "C1=%{x}<br>数值=%{y}<br>批次=%{fullData.name}"
@@ -277,30 +355,54 @@ def build_parameter_figure(
                     x=[start, end],
                     y=[value, value],
                     mode="lines+text",
-                    line={"color": "#ff4d4f", "width": 1.5, "dash": "dash"},
+                    line={"color": "#dc2626", "width": 1.8, "dash": "dash"},
                     text=[None, f"{segment_label} {value:g}"],
                     textposition="top left",
-                    textfont={"color": "#ff8080", "size": 11},
+                    textfont={"color": "#b91c1c", "size": 14},
                     hoverinfo="skip",
                     showlegend=False,
                 )
             )
 
     figure.update_layout(
-        title={"text": f"<b>{parameter_title(specs, parameter)}</b>", "x": 0.01, "xanchor": "left"},
-        paper_bgcolor="#182737",
-        plot_bgcolor="#132231",
-        font={"color": "#cbd5e1", "size": 12},
-        height=560,
-        margin={"l": 70, "r": 55, "t": 105, "b": 70},
+        title={
+            "text": f"<b>{parameter_title(specs, parameter)}</b>",
+            "x": 0.01,
+            "xanchor": "left",
+            "font": {"color": "#172033", "size": 22},
+        },
+        paper_bgcolor="#ffffff",
+        plot_bgcolor="#f8fafc",
+        font={
+            "color": "#27364a",
+            "size": 15,
+            "family": "Segoe UI, Microsoft YaHei, sans-serif",
+        },
+        height=600,
+        margin={"l": 82, "r": 178, "t": 108, "b": 82},
         showlegend=True,
         legend={
-            "title": {"text": "批次"},
-            "orientation": "h",
-            "x": 0,
-            "y": 1.12,
+            "title": {"text": "批次", "font": {"size": 15, "color": "#172033"}},
+            "orientation": "v",
+            "x": 1.015,
+            "y": 1,
             "xanchor": "left",
-            "yanchor": "bottom",
+            "yanchor": "top",
+            "font": {"size": 15, "color": "#27364a"},
+            "bgcolor": "rgba(255,255,255,0.88)",
+            "bordercolor": "#d8e2ec",
+            "borderwidth": 1,
+            "itemsizing": "constant",
+        },
+        hoverlabel={
+            "bgcolor": "#ffffff",
+            "bordercolor": "#2563eb",
+            "font": {"color": "#172033", "size": 14},
+        },
+        modebar={
+            "bgcolor": "rgba(255,255,255,0)",
+            "color": "#64748b",
+            "activecolor": "#2563eb",
         },
         hovermode="closest",
     )
@@ -313,20 +415,29 @@ def build_parameter_figure(
         xanchor="right",
         yanchor="bottom",
         showarrow=False,
-        font={"color": "#ff9393", "size": 11},
+        font={"color": "#b91c1c", "size": 14},
     )
     figure.update_xaxes(
         title="C1（测试序号）",
-        gridcolor="#2b4255",
+        title_font={"size": 17, "color": "#27364a"},
+        tickfont={"size": 15, "color": "#334155"},
+        gridcolor="#dbe4ee",
+        gridwidth=1,
         zeroline=False,
         showline=True,
-        linecolor="#496174",
+        linecolor="#94a3b8",
+        tickcolor="#94a3b8",
+        ticks="outside",
     )
     figure.update_yaxes(
         title="",
-        gridcolor="#2b4255",
+        tickfont={"size": 15, "color": "#334155"},
+        gridcolor="#dbe4ee",
+        gridwidth=1,
         zeroline=False,
         showline=True,
-        linecolor="#496174",
+        linecolor="#94a3b8",
+        tickcolor="#94a3b8",
+        ticks="outside",
     )
     return figure, stats

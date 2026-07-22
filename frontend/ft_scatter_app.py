@@ -27,12 +27,15 @@ st.set_page_config(page_title="FT 参数散点图", page_icon="📊", layout="wi
 st.markdown(
     """
     <style>
-      .stApp { background: #0b1722; color: #d8e4ee; }
+      .stApp { background: #f3f6fa; color: #1f2937; }
       .block-container { max-width: 1600px; padding: 1.25rem 1.3rem 3rem; }
-      [data-testid="stPlotlyChart"] { background:#182737; border:1px solid #294258;
-        border-radius:14px; padding:9px; margin-bottom:18px; }
-      h1 { color:#eaf4ff; font-size:1.8rem !important; }
-      .scatter-summary { color:#91a8bb; margin-bottom:1rem; }
+      [data-testid="stPlotlyChart"] { background:#ffffff; border:1px solid #d8e2ec;
+        border-radius:14px; padding:10px; margin-bottom:18px;
+        box-shadow:0 4px 14px rgba(30, 64, 99, 0.08); }
+      h1 { color:#172033; font-size:2rem !important; }
+      .scatter-summary { color:#52657a; font-size:1.05rem; margin-bottom:1rem; }
+      [data-testid="stCaptionContainer"] { color:#52657a; font-size:0.98rem; }
+      [data-testid="stCaptionContainer"] p { font-size:0.98rem; }
     </style>
     """,
     unsafe_allow_html=True,
