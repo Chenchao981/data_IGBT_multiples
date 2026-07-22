@@ -1,5 +1,8 @@
 import os
+import tempfile
 import unittest
+from pathlib import Path
+from types import SimpleNamespace
 from unittest.mock import patch
 
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
@@ -7,6 +10,7 @@ os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 from PyQt5.QtWidgets import QApplication
 
 from gui.panels.dianji_panel import DianjiPanel
+from gui.operation_result import OperationResult
 
 
 class DianjiPanelTests(unittest.TestCase):
@@ -44,6 +48,27 @@ class DianjiPanelTests(unittest.TestCase):
                 r"F:\data\dianji_output",
             )
             cleaner_cls.return_value.process_all.assert_called_once_with()
+
+    def test_ft_all_returns_manifest_and_enables_scatter_after_success(self):
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            manifest = root / "dianji_ft_scatter_manifest.json"
+            manifest.write_text("{}", encoding="utf-8")
+            output = root / "cleaned.xlsx"
+            output.touch()
+            with patch("factories.dianji.dc_cleaner.DianjiDCCleaner") as cleaner_cls:
+                cleaner = cleaner_cls.return_value
+                cleaner.process_all.return_value = True
+                cleaner.last_output_file = output
+                cleaner.last_scatter_manifest = manifest
+                result = self.panel._get_cleaner_fn("FT-ALL")()
+
+            self.assertIsInstance(result, OperationResult)
+            self.assertEqual(result.scatter_manifest, manifest)
+            self.panel.worker = SimpleNamespace(result=result)
+            with patch("gui.panels.base_panel.QMessageBox.information"):
+                self.panel._on_finished("电基 FT-ALL 完成", True)
+            self.assertTrue(self.panel.scatter_btn.isEnabled())
 
     def test_pat_calls_dianji_report_with_selected_cleaned_files(self):
         self.panel.input_edit.setText(

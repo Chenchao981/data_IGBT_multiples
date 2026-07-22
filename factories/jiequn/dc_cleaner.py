@@ -41,6 +41,8 @@ class JiequnDCCleaner(BaseCleaner):
         if output_dir is None:
             output_dir = "output/杰群-output"
         super().__init__(input_dir, output_dir)
+        self.last_output_file: Path | None = None
+        self.last_scatter_manifest: Path | None = None
 
     def _get_dc_subdir(self) -> Path:
         sub = TYPE_SUBDIRS.get("DC", "DC")
@@ -77,6 +79,8 @@ class JiequnDCCleaner(BaseCleaner):
         logger.info("=" * 50)
         logger.info("杰群 DC 数据清洗")
         logger.info("=" * 50)
+        self.last_output_file = None
+        self.last_scatter_manifest = None
 
         try:
             dc_dir = self._get_dc_subdir()
@@ -86,15 +90,26 @@ class JiequnDCCleaner(BaseCleaner):
             logger.info(f"文件: {len(csv_files)} 个")
 
             all_dfs = []
+            all_spec_frames = []
+            spec_unit_factors = {
+                name: rule["factor"] for name, rule in UNIT_CONVERSIONS.items()
+            }
             for f in csv_files:
                 df = parse_dta_csv(
                     str(f),
                     DC_PARAMS,
                     unique_only=False,
                     skip_match_counts=JIEQUN_DC_SKIP_MATCH_COUNTS,
+                    spec_unit_factors=spec_unit_factors,
                 )
                 if df is not None and not df.empty:
+                    specs = df.attrs.get("scatter_specs")
+                    source_id = df.attrs.get("source_id", f.stem)
+                    df = df.copy()
+                    df["_source_id"] = source_id
                     all_dfs.append(df)
+                    if specs is not None and not specs.empty:
+                        all_spec_frames.append(specs)
 
             if not all_dfs:
                 logger.error("无数据")
@@ -108,15 +123,35 @@ class JiequnDCCleaner(BaseCleaner):
 
             merged.dropna(subset=['周记'], inplace=True)
             merged.reset_index(drop=True, inplace=True)
+            source_ids = merged.pop("_source_id")
             merged.insert(0, 'NUM', range(1, len(merged) + 1))
             merged = normalize_output_columns(merged, "DC")
 
             zhouji_list = merged[BATCH_COL].tolist() if BATCH_COL in merged.columns else ['unknown']
             run_dir = create_output_run_dir(self.output_dir, zhouji_list)
             out = run_dir / generate_run_filename(run_dir)
-            write_excel_fast(merged, out, sheet_name='DC_Data')
+            if not write_excel_fast(merged, out, sheet_name='DC_Data'):
+                raise OSError(f"杰群 DC 清洗结果写入失败: {out}")
+            self.last_output_file = out.resolve()
+
+            if not all_spec_frames:
+                raise ValueError("没有从杰群源文件读取到测试参数上下限")
+            from frontend.ft_scatter import export_scatter_bundle
+
+            scatter_data = merged.rename(columns={BATCH_COL: "lot_ID"}).copy()
+            scatter_data.insert(2, "Source_ID", source_ids.astype(str).tolist())
+            specs = pd.concat(all_spec_frames, ignore_index=True, sort=False)
+            self.last_scatter_manifest = export_scatter_bundle(
+                scatter_data,
+                specs,
+                run_dir,
+                cleaned_file=self.last_output_file,
+                factory=self.factory_name,
+                data_type="DC",
+            ).resolve()
 
             logger.info(f"保存: {out} ({len(merged):,} 行)")
+            logger.info(f"FT散点图数据包: {self.last_scatter_manifest}")
             return True
 
         except Exception as e:

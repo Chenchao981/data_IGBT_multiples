@@ -14,7 +14,7 @@ import glob
 import fnmatch
 from pathlib import Path
 
-VERSION = '2.7.3'
+VERSION = '2.8.0'
 
 # --- Configuration ---
 # Project root
@@ -215,8 +215,8 @@ Run:
 
 Features:
 - ASE: DC, FT scatter charts, DVDS, RG, PAT, and SYL&SBL
-- Jiequn: DC-AI, DC-1, DC-unified, DC-3, DVDS, RG, PAT, and SYL&SBL
-- Dianji: FT-ALL cleaning, PAT, and SYL&SBL
+- Jiequn: DC-AI, DC-1, DC-unified, DC-3, FT scatter charts, DVDS, RG, PAT, and SYL&SBL
+- Dianji: FT-ALL cleaning, FT scatter charts, PAT, and SYL&SBL
 
 Notes:
 - Jiequn DC-AI is the recommended default and detects one DC format per selected directory.
@@ -227,8 +227,9 @@ Notes:
 - PAT accepts one or more cleaned Excel files; Dianji uses RAW/RAW_n sheets, while ASE/Jiequn use DC/DVDS/RG_Data sheets.
 - SYL&SBL accepts one .xls or .xlsx yield workbook.
 - Output files are saved under the selected output directory.
-- After ASE DC cleaning succeeds, click FT Scatter Chart to open one chart per parameter.
-- Scatter limits come directly from each source file's Low Limit and High Limit rows.
+- After a supported ASE, Jiequn, or Dianji cleaning operation succeeds, click FT Scatter Chart to open one chart per parameter.
+- Scatter limits and bias conditions come from each source file and use the same output-unit conversion as cleaned measurements.
+- Reversed numeric Min/Max values in Jiequn P-type programs are normalized for LSL/USL while retaining the raw cells.
 - Scatter colors and the right-side legend identify lot_ID batches.
 - Scatter charts use a light theme with enlarged markers, axis numbers, titles, legends, and limit labels.
 - Dense repeated in-spec values are compacted for faster opening; every OOS point is retained.

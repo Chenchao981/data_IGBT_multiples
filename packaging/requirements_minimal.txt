@@ -17,5 +17,5 @@ PyInstaller>=5.0.0,<7.0.0
 
 # 注意：
 # 1. 版本范围限制可以减少依赖冲突
-# 2. Plotly 和 Streamlit 用于日月新 DC 散点图
+# 2. Plotly 和 Streamlit 用于日月新、杰群、电基 FT 散点图
 # 3. 如果用户已有完整的anaconda环境，可以跳过这些包的安装 

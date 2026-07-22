@@ -6,7 +6,9 @@
 """
 import sys
 sys.path.insert(0, '.')
+from dataclasses import dataclass
 from pathlib import Path
+from typing import Optional
 from factories.jiequn.config import JIEQUN_DC_PARAMS, JIEQUN_DC_SKIP_MATCH_COUNTS
 from factories.jiequn.csv_parser import parse_dta_csv
 from factories.jiequn.formatting import BATCH_COL, LEGACY_BATCH_COL
@@ -31,24 +33,47 @@ TYPES = [
     ("RG",   ["LCR-RG"], True),
 ]
 
-def run(input_dir, output_dir):
+
+@dataclass(frozen=True)
+class UnifiedRunResult:
+    success: bool
+    output_file: Optional[Path] = None
+    scatter_manifest: Optional[Path] = None
+
+    def __bool__(self):
+        return self.success
+
+
+def run_with_result(input_dir, output_dir) -> UnifiedRunResult:
     inp, out = Path(input_dir), Path(output_dir)
     out.mkdir(parents=True, exist_ok=True)
     files = sorted(inp.glob("*DTA.CSV"))
     print(f"文件: {len(files)}")
     success = False
     run_dir = None
+    dc_output_file = None
+    scatter_manifest = None
     for label, params, unique in TYPES:
-        dfs = [
-            parse_dta_csv(
+        dfs = []
+        spec_frames = []
+        for f in files:
+            df = parse_dta_csv(
                 str(f),
                 params,
                 unique_only=unique,
                 preserve_source_order=True,
                 skip_match_counts=JIEQUN_DC_SKIP_MATCH_COUNTS if label == "DC" else None,
+                spec_unit_factors=NUM_CONV if label == "DC" else None,
             )
-            for f in files
-        ]
+            if df is not None and not df.empty:
+                if label == "DC":
+                    specs = df.attrs.get("scatter_specs")
+                    if specs is not None and not specs.empty:
+                        spec_frames.append(specs)
+                    source_id = df.attrs.get("source_id", f.stem)
+                    df = df.copy()
+                    df["_source_id"] = source_id
+                dfs.append(df)
         dfs = [d for d in dfs if d is not None and not d.empty]
         if not dfs: print(f"{label}: 无数据"); continue
         merged = pd.concat(dfs, ignore_index=True, sort=False)
@@ -62,15 +87,40 @@ def run(input_dir, output_dir):
             if removed:
                 print(f"{label}: 已删除空值记录 {removed:,} 行")
         merged.reset_index(drop=True, inplace=True)
+        source_ids = merged.pop("_source_id") if label == "DC" else None
         merged.insert(0, "NUM", range(1, len(merged)+1))
         merged = _normalize_unified_columns(merged)
         if run_dir is None:
             run_dir = create_output_run_dir(out, merged[BATCH_COL].tolist())
         fname = generate_run_filename(run_dir, label)
-        write_excel_fast(merged, run_dir / fname, sheet_name=f"{label}_Data")
+        output_file = run_dir / fname
+        if not write_excel_fast(merged, output_file, sheet_name=f"{label}_Data"):
+            raise OSError(f"杰群统一CSV {label} 清洗结果写入失败: {output_file}")
+        if label == "DC":
+            if not spec_frames:
+                raise ValueError("没有从杰群统一CSV读取到 DC 参数上下限")
+            from frontend.ft_scatter import export_scatter_bundle
+
+            scatter_data = merged.rename(columns={BATCH_COL: "lot_ID"}).copy()
+            scatter_data.insert(2, "Source_ID", source_ids.astype(str).tolist())
+            specs = pd.concat(spec_frames, ignore_index=True, sort=False)
+            dc_output_file = output_file.resolve()
+            scatter_manifest = export_scatter_bundle(
+                scatter_data,
+                specs,
+                run_dir,
+                cleaned_file=dc_output_file,
+                factory="杰群",
+                data_type="DC",
+            ).resolve()
         print(f"{label}: {len(merged):,} 行 -> {fname}")
         success = True
-    return success
+    return UnifiedRunResult(success, dc_output_file, scatter_manifest)
+
+
+def run(input_dir, output_dir):
+    """Backward-compatible boolean entry point."""
+    return bool(run_with_result(input_dir, output_dir))
 
 
 def _normalize_unified_columns(df: pd.DataFrame) -> pd.DataFrame:

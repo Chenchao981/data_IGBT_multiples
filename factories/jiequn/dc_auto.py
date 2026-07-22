@@ -12,7 +12,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Iterable
 
-from factories.jiequn.clean_unified import run as run_unified
+from factories.jiequn.clean_unified import run_with_result as run_unified
 from factories.jiequn.config import JIEQUN_DC_PARAMS
 from factories.jiequn.csv_parser import _item_matches_param, read_header_info
 from factories.jiequn.dc_cleaner import JiequnDCCleaner
@@ -42,6 +42,17 @@ class DCFormatDetection:
     @property
     def file_count(self) -> int:
         return len(self.files)
+
+
+@dataclass(frozen=True)
+class AutoDCRunResult:
+    success: bool
+    format_name: str
+    output_file: Path | None = None
+    scatter_manifest: Path | None = None
+
+    def __bool__(self) -> bool:
+        return self.success
 
 
 def _scan_dta_csv_files(input_dir: Path) -> list[Path]:
@@ -188,7 +199,7 @@ def detect_dc_format(input_dir: str | Path) -> DCFormatDetection:
     )
 
 
-def run_auto_dc(input_dir: str | Path, output_dir: str | Path) -> bool:
+def run_auto_dc(input_dir: str | Path, output_dir: str | Path) -> AutoDCRunResult:
     """Detect the input format, log the evidence, and run its cleaner."""
 
     detection = detect_dc_format(input_dir)
@@ -199,13 +210,24 @@ def run_auto_dc(input_dir: str | Path, output_dir: str | Path) -> bool:
     print("=" * 60)
 
     if detection.format_name == DC_FORMAT_UNIFIED:
-        return bool(run_unified(detection.source_dir, output_dir))
+        result = run_unified(detection.source_dir, output_dir)
+        return AutoDCRunResult(
+            success=bool(result),
+            format_name=detection.format_name,
+            output_file=getattr(result, "output_file", None),
+            scatter_manifest=getattr(result, "scatter_manifest", None),
+        )
 
-    return bool(
-        JiequnDCCleaner(
-            input_dir=detection.source_dir,
-            output_dir=output_dir,
-        ).process_all()
+    cleaner = JiequnDCCleaner(
+        input_dir=detection.source_dir,
+        output_dir=output_dir,
+    )
+    success = cleaner.process_all()
+    return AutoDCRunResult(
+        success=success,
+        format_name=detection.format_name,
+        output_file=cleaner.last_output_file,
+        scatter_manifest=cleaner.last_scatter_manifest,
     )
 
 

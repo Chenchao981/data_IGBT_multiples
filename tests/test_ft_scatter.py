@@ -45,6 +45,17 @@ class FTScatterBundleTests(unittest.TestCase):
             raw_manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
             self.assertEqual(raw_manifest["data_file"], "ft_scatter_data.csv.gz")
             self.assertEqual(raw_manifest["cleaned_file"], "FA59-3997_001.xlsx")
+
+            named_manifest = export_scatter_bundle(
+                data,
+                specs,
+                output_dir,
+                cleaned_file=cleaned_file,
+                bundle_stem="electric_ft_scatter",
+            )
+            self.assertEqual(
+                named_manifest.name, "electric_ft_scatter_manifest.json"
+            )
             self.assertEqual(raw_manifest["lots"], ["LOT-A", "LOT-B"])
 
             manifest, loaded_data, loaded_specs = load_scatter_bundle(manifest_path)

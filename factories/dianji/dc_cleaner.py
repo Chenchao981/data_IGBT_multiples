@@ -42,6 +42,7 @@ class DianjiDCCleaner(BaseCleaner):
     def __init__(self, input_dir: str | Path, output_dir: str | Path):
         super().__init__(str(input_dir), str(output_dir))
         self.last_output_file: Path | None = None
+        self.last_scatter_manifest: Path | None = None
         self.last_run_summary: dict[str, object] = {}
 
     def scan_source_files(self) -> list[Path]:
@@ -67,6 +68,8 @@ class DianjiDCCleaner(BaseCleaner):
     def process_all(self, data_type: str | None = None) -> bool:
         if data_type not in (None, "FT-ALL", "DC"):
             raise ValueError(f"电基不支持的数据类型: {data_type}")
+        self.last_output_file = None
+        self.last_scatter_manifest = None
 
         files = self.scan_source_files()
         logger.info("电基 PowerTECH 清洗开始，共 %s 个文件", len(files))
@@ -97,11 +100,15 @@ class DianjiDCCleaner(BaseCleaner):
             )
             raise DianjiFormatError(f"电基文件输出参数不一致，拒绝错列合并: {details}")
 
-        merged = pd.concat(
-            [parsed.data for parsed in parsed_files], ignore_index=True, sort=False
-        )
+        source_frames = []
+        for parsed in parsed_files:
+            frame = parsed.data.copy()
+            frame["_source_id"] = parsed.path.stem
+            source_frames.append(frame)
+        merged = pd.concat(source_frames, ignore_index=True, sort=False)
         if merged.empty:
             raise DianjiFormatError("所有源文件都没有测到有效 DVDS 数据，未生成输出")
+        source_ids = merged.pop("_source_id").astype(str)
         merged.insert(0, "NUM", range(1, len(merged) + 1))
 
         product = next(iter(products))
@@ -119,7 +126,24 @@ class DianjiDCCleaner(BaseCleaner):
             invalid_counts.update(parsed.invalid_marker_counts)
         batch_counts = merged["批次"].value_counts().sort_index().to_dict()
         source_rows = sum(parsed.source_rows for parsed in parsed_files)
-        self.last_output_file = output_file
+        self.last_output_file = output_file.resolve()
+        from frontend.ft_scatter import export_scatter_bundle
+
+        scatter_data = merged.rename(columns={"批次": "lot_ID"}).copy()
+        scatter_data.insert(2, "Source_ID", source_ids.tolist())
+        specs = pd.concat(
+            [parsed.specs for parsed in parsed_files], ignore_index=True, sort=False
+        )
+        bundle_stem = f"{output_file.stem}_ft_scatter"
+        self.last_scatter_manifest = export_scatter_bundle(
+            scatter_data,
+            specs,
+            output_file.parent,
+            cleaned_file=self.last_output_file,
+            factory=FACTORY_NAME,
+            data_type="FT-ALL",
+            bundle_stem=bundle_stem,
+        ).resolve()
         self.last_run_summary = {
             "files": len(parsed_files),
             "product": product,
@@ -142,6 +166,7 @@ class DianjiDCCleaner(BaseCleaner):
             len(merged),
             source_rows - len(merged),
         )
+        logger.info("FT散点图数据包: %s", self.last_scatter_manifest)
         return True
 
 

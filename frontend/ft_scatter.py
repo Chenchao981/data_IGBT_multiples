@@ -48,6 +48,7 @@ def export_scatter_bundle(
     cleaned_file: Path | str,
     factory: str = "日月新（ASE）",
     data_type: str = "DC",
+    bundle_stem: str = "ft_scatter",
 ) -> Path:
     """Write a portable scatter bundle and return its manifest path.
 
@@ -58,6 +59,13 @@ def export_scatter_bundle(
     output_dir = Path(output_dir).resolve()
     output_dir.mkdir(parents=True, exist_ok=True)
     cleaned_file = Path(cleaned_file).resolve()
+    bundle_stem = str(bundle_stem).strip()
+    if (
+        not bundle_stem
+        or bundle_stem in {".", ".."}
+        or Path(bundle_stem).name != bundle_stem
+    ):
+        raise ValueError(f"散点图数据包名称非法: {bundle_stem!r}")
 
     required = {"NUM", "lot_ID", "Source_ID"}
     missing = required.difference(data.columns)
@@ -70,9 +78,9 @@ def export_scatter_bundle(
     if not parameters:
         raise ValueError("散点图数据中没有测试参数")
 
-    data_file = output_dir / "ft_scatter_data.csv.gz"
-    spec_file = output_dir / "ft_scatter_spec.csv"
-    manifest_file = output_dir / "ft_scatter_manifest.json"
+    data_file = output_dir / f"{bundle_stem}_data.csv.gz"
+    spec_file = output_dir / f"{bundle_stem}_spec.csv"
+    manifest_file = output_dir / f"{bundle_stem}_manifest.json"
 
     data.to_csv(data_file, index=False, encoding="utf-8-sig", compression="gzip")
     specs.to_csv(spec_file, index=False, encoding="utf-8-sig")
@@ -121,6 +129,9 @@ def load_scatter_bundle(manifest_path: Path | str) -> tuple[dict, pd.DataFrame, 
     spec_file = _resolve_manifest_child(manifest_path, manifest["spec_file"])
     data = pd.read_csv(data_file, compression="gzip", low_memory=False)
     specs = pd.read_csv(spec_file, keep_default_na=False)
+    for column in ("Low_Limit", "High_Limit"):
+        if column in specs.columns:
+            specs[column] = pd.to_numeric(specs[column], errors="coerce")
 
     required = {"NUM", "lot_ID", "Source_ID"}
     if not required.issubset(data.columns):

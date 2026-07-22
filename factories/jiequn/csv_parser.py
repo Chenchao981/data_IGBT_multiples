@@ -89,12 +89,26 @@ def read_header_info(file_path: str, max_scan: int = 40) -> dict:
     """
     读取 CSV 头部关键信息。
     Returns:
-        { "item_names": [...], "limit_units": [...], "bias1_values": [...],
-          "data_start": int, "item_idx": int }
+        Item, Min/Max Limit, Limit Units, Bias 1-3, and data-row locations.
     """
     lines = _read_header_lines(file_path, max_scan)
-    info = {"item_names": [], "min_limits": [], "limit_units": [], "bias1_values": [],
-            "data_start": -1, "item_idx": -1}
+    info = {
+        "item_names": [],
+        "min_limits": [],
+        "max_limits": [],
+        "limit_units": [],
+        "bias1_names": [],
+        "bias1_values": [],
+        "bias1_units": [],
+        "bias2_names": [],
+        "bias2_values": [],
+        "bias2_units": [],
+        "bias3_names": [],
+        "bias3_values": [],
+        "bias3_units": [],
+        "data_start": -1,
+        "item_idx": -1,
+    }
 
     for idx, line in enumerate(lines):
         parts = _split_line(line)
@@ -112,8 +126,35 @@ def read_header_info(file_path: str, max_scan: int = 40) -> dict:
         elif first == 'Min Limit':
             info["min_limits"] = parts[1:]
 
+        elif first == 'Max Limit':
+            info["max_limits"] = parts[1:]
+
+        elif first == 'Bias 1':
+            info["bias1_names"] = parts[1:]
+
         elif first == 'Bias 1 Value':
             info["bias1_values"] = parts[1:]
+
+        elif first == 'Bias 1 Units':
+            info["bias1_units"] = parts[1:]
+
+        elif first == 'Bias 2':
+            info["bias2_names"] = parts[1:]
+
+        elif first == 'Bias 2 Value':
+            info["bias2_values"] = parts[1:]
+
+        elif first == 'Bias 2 Units':
+            info["bias2_units"] = parts[1:]
+
+        elif first == 'Bias 3':
+            info["bias3_names"] = parts[1:]
+
+        elif first == 'Bias 3 Value':
+            info["bias3_values"] = parts[1:]
+
+        elif first == 'Bias 3 Units':
+            info["bias3_units"] = parts[1:]
 
         elif first == 'Serial' and info["data_start"] < 0:
             info["data_start"] = idx + 1
@@ -230,6 +271,96 @@ def _get_bias_value(bias_values: List[str], csv_field_idx: int) -> str:
     return ""
 
 
+def _header_value(values: List[str], csv_field_idx: int) -> str:
+    index = csv_field_idx - 1
+    if 0 <= index < len(values):
+        return str(values[index]).strip()
+    return ""
+
+
+def _parse_limit_value(value: str) -> Optional[float]:
+    text = str(value).strip()
+    if not text:
+        return None
+    match = re.search(r"[+-]?(?:\d+(?:\.\d*)?|\.\d+)(?:[Ee][+-]?\d+)?", text)
+    return float(match.group(0)) if match else None
+
+
+def _format_bias_condition(info: dict, prefix: str, csv_field_idx: int) -> str:
+    name = _header_value(info.get(f"{prefix}_names", []), csv_field_idx)
+    value = _header_value(info.get(f"{prefix}_values", []), csv_field_idx)
+    unit = _header_value(info.get(f"{prefix}_units", []), csv_field_idx)
+    if not name or not value:
+        return ""
+    return f"{name}={value}{unit}"
+
+
+def _build_scatter_specs(
+    file_path: str,
+    info: dict,
+    valid_columns: List[Tuple[int, str]],
+    param_base_by_column: Dict[int, str],
+    spec_unit_factors: Optional[Dict[str, float]],
+) -> pd.DataFrame:
+    """Build source-aligned, output-unit limits for FT scatter charts."""
+    path = Path(file_path)
+    source_id = path.stem
+    lot_id = extract_zhouji(path.name)
+    factors = {
+        str(name).upper(): float(factor)
+        for name, factor in (spec_unit_factors or {}).items()
+    }
+    records = []
+    for csv_field_idx, parameter in valid_columns:
+        if csv_field_idx in (0, 1):
+            continue
+        param_base = param_base_by_column[csv_field_idx]
+        factor = factors.get(param_base.upper(), 1.0)
+        low_raw = _header_value(info.get("min_limits", []), csv_field_idx)
+        high_raw = _header_value(info.get("max_limits", []), csv_field_idx)
+        low_value = _parse_limit_value(low_raw)
+        high_value = _parse_limit_value(high_raw)
+        if low_value is not None:
+            low_value *= factor
+        if high_value is not None:
+            high_value *= factor
+
+        # Some P-type programs export Min/Max in tester polarity order rather
+        # than ascending numeric order.  Keep the raw cells for traceability,
+        # but use true numeric lower/upper bounds for OOS judgement.
+        normalized = (
+            low_value is not None
+            and high_value is not None
+            and low_value > high_value
+        )
+        if normalized:
+            low_value, high_value = high_value, low_value
+
+        conditions = [
+            _format_bias_condition(info, prefix, csv_field_idx)
+            for prefix in ("bias1", "bias2", "bias3")
+        ]
+        conditions = [condition for condition in conditions if condition]
+        records.append(
+            {
+                "Source_ID": source_id,
+                "lot_ID": lot_id,
+                "Parameter": parameter,
+                "Unit": _get_unit(
+                    info.get("limit_units", []), csv_field_idx, param_base
+                ),
+                "Low_Limit": low_value,
+                "High_Limit": high_value,
+                "Low_Limit_Raw": low_raw,
+                "High_Limit_Raw": high_raw,
+                "Test_Condition": "; ".join(conditions),
+                "Limit_Order_Normalized": normalized,
+                "Source_File": path.name,
+            }
+        )
+    return pd.DataFrame.from_records(records)
+
+
 def _get_unit(limit_units: List[str], csv_field_idx: int, param_base: str,
               prefer_source_unit: bool = False) -> str:
     """获取某列的单位"""
@@ -343,7 +474,8 @@ def parse_dta_csv(file_path: str, target_params: List[str],
                   unique_only: bool = False,
                   preserve_source_order: bool = False,
                   skip_match_counts: Optional[Dict[str, int]] = None,
-                  prefer_source_units: bool = False) -> Optional[pd.DataFrame]:
+                  prefer_source_units: bool = False,
+                  spec_unit_factors: Optional[Dict[str, float]] = None) -> Optional[pd.DataFrame]:
     """
     解析杰群 DTA CSV，提取目标参数并用增强名称（含测试条件+单位）。
 
@@ -354,6 +486,7 @@ def parse_dta_csv(file_path: str, target_params: List[str],
         preserve_source_order: True 时按 Item 行从左到右匹配，适用于统一 CSV 对照源数据
         skip_match_counts: 指定参数跳过前 N 个匹配项，如 {"VTH": 1}
         prefer_source_units: True 时优先使用源 CSV 的 Limit Units 行作为输出单位
+        spec_unit_factors: 散点图规格值使用的单位换算因子
 
     Returns:
         DataFrame，含 周记 + 增强参数列，失败返回 None
@@ -432,6 +565,7 @@ def parse_dta_csv(file_path: str, target_params: List[str],
     col_names = [n.replace("LCR-RG", "RG") for n in col_names]
 
     # 去重（同名参数可能因 bias 相同而产生）
+    param_base_by_column = {column: base for column, base in col_matches}
     final_cols, final_names = _dedupe_param_columns(use_cols, col_names)
 
     # 第三产线的表头和数据区宽度各自可变。表头可能只有 Serial/Bin，
@@ -469,6 +603,15 @@ def parse_dta_csv(file_path: str, target_params: List[str],
     # 数值化
     for col in val_cols:
         df[col] = pd.to_numeric(df[col], errors='coerce')
+
+    df.attrs["source_id"] = Path(file_path).stem
+    df.attrs["scatter_specs"] = _build_scatter_specs(
+        file_path,
+        info,
+        valid,
+        param_base_by_column,
+        spec_unit_factors,
+    )
 
     print(f"  [OK] {fname}: {len(df):,} 行, 参数: {val_cols}")
     return df

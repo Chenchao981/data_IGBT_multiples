@@ -10,6 +10,7 @@ project_root = Path(__file__).resolve().parent.parent.parent
 sys.path.append(str(project_root))
 
 from gui.panels.base_panel import BasePanel
+from gui.operation_result import OperationResult
 from factories.jiequn.config import FACTORY_NAME
 
 
@@ -18,6 +19,7 @@ class JiequnPanel(BasePanel):
     data_types = ["DC-AI", "DC-1", "DC-统一CSV", "DC-3", "DVDS", "RG"]
     pat_analysis_types = ["PAT"]
     yield_analysis_types = ["SYL&SBL"]
+    scatter_supported_types = ["DC-AI", "DC-1", "DC-统一CSV", "DC-3"]
     default_input = str(Path.home() / "Desktop")
     default_output = str(Path.home() / "Desktop")
 
@@ -31,17 +33,31 @@ class JiequnPanel(BasePanel):
 
         if data_type == "DC-AI":
             from factories.jiequn.dc_auto import run_auto_dc
-            return lambda: self._require_success(
-                "DC-AI",
-                run_auto_dc(input_dir=inp, output_dir=out),
-            )
+
+            def _run_auto_dc():
+                result = run_auto_dc(input_dir=inp, output_dir=out)
+                self._require_success("DC-AI", bool(result))
+                return OperationResult(
+                    success=True,
+                    output_file=getattr(result, "output_file", None),
+                    scatter_manifest=getattr(result, "scatter_manifest", None),
+                )
+
+            return _run_auto_dc
 
         if data_type in {"DC", "DC-1", "DC-3"}:
             from factories.jiequn.dc_cleaner import JiequnDCCleaner
-            return lambda: self._require_success(
-                data_type,
-                JiequnDCCleaner(input_dir=inp, output_dir=out).process_all(),
-            )
+
+            def _run_dc():
+                cleaner = JiequnDCCleaner(input_dir=inp, output_dir=out)
+                self._require_success(data_type, cleaner.process_all())
+                return OperationResult(
+                    success=True,
+                    output_file=cleaner.last_output_file,
+                    scatter_manifest=cleaner.last_scatter_manifest,
+                )
+
+            return _run_dc
 
         elif data_type == "DVDS":
             from factories.jiequn.dvds_cleaner import JiequnDVDSCleaner
@@ -52,8 +68,18 @@ class JiequnPanel(BasePanel):
             return lambda: self._require_success("RG", JiequnRGCleaner(input_dir=inp, output_dir=out).process_all())
 
         elif data_type in {"统一CSV", "DC-统一CSV"}:
-            from factories.jiequn.clean_unified import run
-            return lambda: self._require_success(data_type, run(input_dir=inp, output_dir=out))
+            from factories.jiequn.clean_unified import run_with_result
+
+            def _run_unified():
+                result = run_with_result(input_dir=inp, output_dir=out)
+                self._require_success(data_type, bool(result))
+                return OperationResult(
+                    success=True,
+                    output_file=result.output_file,
+                    scatter_manifest=result.scatter_manifest,
+                )
+
+            return _run_unified
 
         elif data_type == "PAT":
             from factories.jiequn.pat_cleaner import generate_pat

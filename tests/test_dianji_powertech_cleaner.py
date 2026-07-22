@@ -10,6 +10,7 @@ from factories.dianji.powertech_parser import (
     parse_dianji_filename,
     parse_powertech_file,
 )
+from frontend.ft_scatter import load_scatter_bundle
 
 
 ITEM_NAMES = [
@@ -113,6 +114,14 @@ def _make_source(
     sentinel[0] = "4"
     sentinel[22 + 2] = "9999"
 
+    min_limits = [""] * 34
+    max_limits = [""] * 34
+    min_limits[4 - 1] = "60.00mV"
+    max_limits[4 - 1] = "85.00mV"
+    min_limits[12 - 1] = "2.600R"
+    max_limits[12 - 1] = "3.800R"
+    max_limits[22 - 1] = "60.00nA"
+
     lines = [
         "PowerTECH Test System\t\tTester Serial: \tSDTS10191810\t\tStation : \tA",
         f"DataFileName:\t\tD:\\EUIT_Test_Data\\{metadata_manufacturing_lot} {metadata_batch}.plf",
@@ -126,8 +135,8 @@ def _make_source(
         _header_row("Bias2", bias2),
         _header_row("Bias3", bias3),
         "Para",
-        _header_row("Min Limit", [""] * 34),
-        _header_row("Max Limit", [""] * 34),
+        _header_row("Min Limit", min_limits),
+        _header_row("Max Limit", max_limits),
         "Min Result",
         "Max Result",
         "Average",
@@ -201,6 +210,15 @@ class PowerTechParserTests(unittest.TestCase):
         self.assertTrue(pd.isna(parsed.data.loc[2, "IDSS100(nA)"]))
         self.assertEqual(parsed.invalid_marker_counts, {"IDSS100(nA)": 1})
         self.assertEqual(parsed.data["批次"].unique().tolist(), ["C000001.00"])
+        vth_spec = parsed.specs.loc[
+            parsed.specs["Parameter"] == "VTH1(V)"
+        ].iloc[0]
+        self.assertIn("ID=250.0uA", vth_spec["Test_Condition"])
+        dvds_spec = parsed.specs.loc[
+            parsed.specs["Parameter"] == "DVDS(mV)"
+        ].iloc[0]
+        self.assertEqual(float(dvds_spec["Low_Limit"]), 60.0)
+        self.assertEqual(float(dvds_spec["High_Limit"]), 85.0)
 
     def test_accepts_verified_item_29_31_variant_with_stable_output_order(self):
         with tempfile.TemporaryDirectory() as temp:
@@ -307,6 +325,21 @@ class DianjiCleanerTests(unittest.TestCase):
             self.assertEqual(result["批次"].value_counts().to_dict(), {"C000001.00": 3, "C000002.00": 3})
             self.assertEqual(cleaner.last_run_summary["source_rows"], 8)
             self.assertEqual(cleaner.last_run_summary["dropped_before_dvds"], 2)
+            self.assertTrue(cleaner.last_scatter_manifest.is_file())
+            manifest, data, specs = load_scatter_bundle(
+                cleaner.last_scatter_manifest
+            )
+            self.assertEqual(manifest["factory"], "电基")
+            self.assertEqual(manifest["data_type"], "FT-ALL")
+            self.assertEqual(len(data), 6)
+            self.assertEqual(data["Source_ID"].nunique(), 2)
+            self.assertEqual(
+                specs.loc[specs["Parameter"] == "DVDS(mV)", "High_Limit"]
+                .dropna()
+                .unique()
+                .tolist(),
+                [85.0],
+            )
 
     def test_reports_tolerated_stale_lot_piece_suffix(self):
         with tempfile.TemporaryDirectory() as temp:

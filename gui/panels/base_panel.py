@@ -455,7 +455,7 @@ class BasePanel(QWidget):
     def _open_scatter(self):
         manifest = self._scatter_manifest_by_type.get(self._selected_type)
         if not manifest or not manifest.is_file():
-            QMessageBox.warning(self, "提示", "请先完成一次日月新 DC 数据清洗")
+            QMessageBox.warning(self, "提示", "请先完成一次支持散点图的 FT 数据清洗")
             return
         try:
             from gui.scatter_launcher import launch_ft_scatter

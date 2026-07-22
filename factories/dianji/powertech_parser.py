@@ -62,6 +62,7 @@ class ParsedPowerTechFile:
     metadata_lot: str
     lot_identity_warning: str | None
     data: pd.DataFrame
+    specs: pd.DataFrame
     source_rows: int
     kept_rows: int
     invalid_marker_counts: dict[str, int]
@@ -120,6 +121,7 @@ def parse_powertech_file(path: str | Path) -> ParsedPowerTechFile:
     )
     items = _build_test_items(rows, labels, path)
     output_columns = _build_output_columns(items, path)
+    specs = _build_scatter_specs(rows, labels, output_columns, identity, path)
 
     records: list[list[float | str]] = []
     source_rows = 0
@@ -145,6 +147,7 @@ def parse_powertech_file(path: str | Path) -> ParsedPowerTechFile:
         metadata_lot=metadata_lot,
         lot_identity_warning=lot_identity_warning,
         data=data,
+        specs=specs,
         source_rows=source_rows,
         kept_rows=len(data),
         invalid_marker_counts=dict(invalid_counts),
@@ -167,7 +170,15 @@ def _read_source_text(path: Path) -> tuple[str, str]:
 
 
 def _locate_header_rows(rows: list[list[str]], path: Path) -> dict[str, int]:
-    required = ("Item Name", "Bias1", "Bias2", "Bias3", "Serial#")
+    required = (
+        "Item Name",
+        "Bias1",
+        "Bias2",
+        "Bias3",
+        "Min Limit",
+        "Max Limit",
+        "Serial#",
+    )
     located: dict[str, int] = {}
     for index, row in enumerate(rows[:80]):
         if row and row[0] in required and row[0] not in located:
@@ -307,6 +318,64 @@ def _build_output_columns(items: list[TestItem], path: Path) -> list[OutputColum
     if duplicates:
         raise DianjiFormatError(f"{path.name} 生成了重复输出列: {duplicates}")
     return columns
+
+
+def _build_scatter_specs(
+    rows: list[list[str]],
+    labels: dict[str, int],
+    output_columns: list[OutputColumn],
+    identity: FileIdentity,
+    path: Path,
+) -> pd.DataFrame:
+    """Capture PowerTECH limits in the same units as the cleaned RAW data."""
+    min_limits = rows[labels["Min Limit"]]
+    max_limits = rows[labels["Max Limit"]]
+    source_id = path.stem
+    records = []
+    for column in output_columns:
+        item = column.item
+        low_raw = _at(min_limits, item.field_index)
+        high_raw = _at(max_limits, item.field_index)
+        low_value = _parse_limit_value(low_raw, column.factor)
+        high_value = _parse_limit_value(high_raw, column.factor)
+        normalized = (
+            low_value is not None
+            and high_value is not None
+            and low_value > high_value
+        )
+        if normalized:
+            low_value, high_value = high_value, low_value
+        conditions = [
+            value.strip()
+            for value in (item.bias1, item.bias2, item.bias3)
+            if value.strip()
+        ]
+        records.append(
+            {
+                "Source_ID": source_id,
+                "lot_ID": identity.batch,
+                "Parameter": column.name,
+                "Unit": TARGET_UNITS.get(item.base_name, ""),
+                "Low_Limit": low_value,
+                "High_Limit": high_value,
+                "Low_Limit_Raw": low_raw,
+                "High_Limit_Raw": high_raw,
+                "Test_Condition": "; ".join(conditions),
+                "Limit_Order_Normalized": normalized,
+                "Source_File": path.name,
+            }
+        )
+    return pd.DataFrame.from_records(records)
+
+
+def _parse_limit_value(value: str, factor: float) -> float | None:
+    text = str(value).strip()
+    if not text:
+        return None
+    match = re.search(r"[+-]?(?:\d+(?:\.\d*)?|\.\d+)(?:[Ee][+-]?\d+)?", text)
+    if not match:
+        return None
+    return float(match.group(0)) * factor
 
 
 def _ordered_output_item_numbers(

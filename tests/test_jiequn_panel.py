@@ -1,5 +1,8 @@
 import os
+import tempfile
 import unittest
+from pathlib import Path
+from types import SimpleNamespace
 from unittest.mock import patch
 
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
@@ -7,6 +10,7 @@ os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 from PyQt5.QtWidgets import QApplication
 
 from gui.panels.jiequn_panel import JiequnPanel
+from gui.operation_result import OperationResult
 
 
 class JiequnPanelTests(unittest.TestCase):
@@ -40,6 +44,37 @@ class JiequnPanelTests(unittest.TestCase):
                 input_dir=r"F:\data\jq_input",
                 output_dir=r"F:\data\jq_output",
             )
+
+    def test_dc_ai_returns_manifest_and_enables_scatter_after_success(self):
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            manifest = root / "ft_scatter_manifest.json"
+            manifest.write_text("{}", encoding="utf-8")
+            output = root / "cleaned.xlsx"
+            output.touch()
+            class TruthyResult(SimpleNamespace):
+                def __bool__(self):
+                    return True
+
+            backend_result = TruthyResult(
+                output_file=output,
+                scatter_manifest=manifest,
+            )
+            with patch(
+                "factories.jiequn.dc_auto.run_auto_dc",
+                return_value=backend_result,
+            ):
+                result = self.panel._get_cleaner_fn("DC-AI")()
+
+            self.assertIsInstance(result, OperationResult)
+            self.assertEqual(result.scatter_manifest, manifest)
+            self.panel.worker = SimpleNamespace(result=result)
+            with patch("gui.panels.base_panel.QMessageBox.information"):
+                self.panel._on_finished("杰群 DC-AI 完成", True)
+            self.assertTrue(self.panel.scatter_btn.isEnabled())
+
+            self.panel._on_type_selected("DVDS")
+            self.assertTrue(self.panel.scatter_btn.isHidden())
 
 
 if __name__ == "__main__":
