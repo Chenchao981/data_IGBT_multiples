@@ -7,10 +7,88 @@ FACTORY_NAME = "电基"
 FACTORY_NAME_EN = "Dianji"
 DATA_TYPES = ["FT-ALL"]
 FILE_EXT = ".xls"
+FILE_EXTS = (".xls", ".csv")
 
 # PowerTECH writes a GB18030/tab-delimited text report but uses an .xls suffix.
 SOURCE_SIGNATURE = "PowerTECH Test System"
 SOURCE_ENCODINGS = ("utf-8-sig", "gb18030")
+
+# STS8203 writes a real UTF-8 CSV with metadata before the CSV header.  The
+# source does not expose Bias voltages, so every supported product needs an
+# explicit, reviewed output mapping instead of a guessed generic mapping.
+STS8203_SIGNATURE = "STS8203 Station"
+STS8203_ENCODING = "utf-8-sig"
+STS8203_EXPECTED_COLUMN_COUNT = 63
+STS8203_EXPECTED_FIELD_INDEXES = {
+    "SITE_NUM": 0,
+    "PART_ID": 1,
+    "PASSFG": 2,
+    "SOFT_BIN": 3,
+    "TEST_NUM": 5,
+    "DVDS": 9,
+    "Zmu_RG2": 18,
+    "QC_VTH": 46,
+    "QC_VTH2": 47,
+    "QC_BVDSS": 48,
+    "QC_BVDSS1": 49,
+    "QC_IDSS": 50,
+    "QC_IGSSF2": 51,
+    "QC_IGSSR2": 52,
+    "QC_IGSSF": 53,
+    "QC_IGSSR": 54,
+    "RDSON2": 55,
+    "QC_VFSD": 56,
+    "QC_IDSS1": 57,
+    "QC_IGSSF1": 58,
+    "QC_IGSSR1": 59,
+    "QC_VTH1": 60,
+    "QC_DELTA_BVDSS": 61,
+    "QC_DELTA_VTH": 62,
+}
+STS8203_EXPECTED_SOURCE_UNITS = {
+    "DVDS": "mV",
+    "Zmu_RG2": "Ohm",
+    "QC_VTH": "V",
+    "QC_VTH2": "V",
+    "QC_BVDSS": "V",
+    "QC_BVDSS1": "V",
+    "QC_IDSS": "nA",
+    "QC_IGSSF2": "nA",
+    "QC_IGSSR2": "nA",
+    "QC_IGSSF": "nA",
+    "QC_IGSSR": "nA",
+    "RDSON2": "mOhm",
+    "QC_VFSD": "V",
+    "QC_IDSS1": "nA",
+    "QC_IGSSF1": "nA",
+    "QC_IGSSR1": "nA",
+    "QC_VTH1": "V",
+    "QC_DELTA_BVDSS": "",
+    "QC_DELTA_VTH": "",
+}
+STS8203_PRODUCT_OUTPUT_FIELDS = {
+    "NCEAP40T20AGU(M)-7E00": (
+        ("DVDS", "DVDS(mV)", "mV"),
+        ("Zmu_RG2", "Rg(R)", "R"),
+        ("QC_VTH", "VTH1(V)", "V"),
+        ("QC_VTH2", "VTH2(V)", "V"),
+        ("QC_BVDSS", "BVDSS1(V)", "V"),
+        ("QC_BVDSS1", "BVDSS2(V)", "V"),
+        ("QC_IDSS", "IDSS40(nA)", "nA"),
+        ("QC_IGSSF2", "IGSS25(nA)", "nA"),
+        ("QC_IGSSR2", "ISGS25(nA)", "nA"),
+        ("QC_IGSSF", "IGSS20(nA)", "nA"),
+        ("QC_IGSSR", "ISGS20(nA)", "nA"),
+        ("RDSON2", "RDON10(mR)", "mR"),
+        ("QC_VFSD", "VFSD(V)", "V"),
+        ("QC_IGSSR1", "ISGS10(nA)", "nA"),
+        ("QC_IGSSF1", "IGSS10(nA)", "nA"),
+        ("QC_IDSS1", "IDSS35(nA)", "nA"),
+        ("QC_VTH1", "VTH3(V)", "V"),
+        ("QC_DELTA_BVDSS", "DELTA BV", ""),
+        ("QC_DELTA_VTH", "DELTA VTH", ""),
+    ),
+}
 
 OUTPUT_SHEET_NAME = "RAW"
 OUTPUT_FILE_SUFFIX = " DJ PAT.xlsx"

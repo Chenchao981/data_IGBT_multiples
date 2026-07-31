@@ -14,7 +14,7 @@ import glob
 import fnmatch
 from pathlib import Path
 
-VERSION = '2.8.2'
+VERSION = '2.9.0'
 
 # --- Configuration ---
 # Project root
@@ -222,10 +222,11 @@ Notes:
 - Jiequn DC-AI is the recommended default and detects one DC format per selected directory.
 - Mixed DC-1, DC-unified, and DC-3 directories are rejected instead of guessed.
 - For Jiequn DC-3, select the third-line DC1 root or a product directory.
-- Dianji FT-ALL accepts a directory of PowerTECH tab-delimited text files with .xls suffixes.
+- Dianji FT-ALL auto-detects verified PowerTECH .xls text and STS8203 .csv sources.
 - Dianji batch IDs accept the verified C203133.03 week-code and FA65-5405 formats, with strict filename/Lot identity checks.
 - Dianji FT-ALL stores each run in a numbered product-family folder such as NCEAP016N85LL(M)_001.
 - Dianji supports both verified item 29-31 layouts and restores one stable RAW column order.
+- Dianji STS8203 currently supports the reviewed NCEAP40T20AGU(M)-7E00 layout and rejects unreviewed product mappings.
 - PAT accepts one or more cleaned Excel files; Dianji uses RAW/RAW_n sheets, while ASE/Jiequn use DC/DVDS/RG_Data sheets.
 - SYL&SBL accepts one .xls or .xlsx yield workbook.
 - Output files are saved under the selected output directory.

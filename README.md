@@ -14,7 +14,7 @@
 | **杰群 第三产线** | .csv 产品目录平铺、可变尾空列 | DC / FT散点图 | ✅ 可用 |
 | **杰群 DC-AI** | 自动识别上述三种目录/头部特征 | 自动分发清洗 / FT散点图 | ✅ 推荐入口 |
 | PAT 参数分析 | 已清洗 Excel | 日月新 / 杰群 / 电基统计汇总 | ✅ 可用 |
-| **电基 (Dianji)** | PowerTECH Tab 文本（伪 `.xls`） | FT-ALL 合并清洗 / FT散点图 | ✅ 可用 |
+| **电基 (Dianji)** | PowerTECH 伪 `.xls` / STS8203 `.csv` | FT-ALL 自动识别清洗 / FT散点图 | ✅ 可用 |
 
 ---
 
@@ -46,8 +46,9 @@ data_IGBT_multiple/
 │   │   └── unified_cleaner.py      ← [备选] 联合清洗
 │
 │   └── dianji/                     ← 电基模块
-│       ├── config.py               ← PowerTECH 布局、单位和输出顺序
+│       ├── config.py               ← PowerTECH/STS8203 布局、单位和输出顺序
 │       ├── powertech_parser.py     ← 伪 .xls 文本解析 + 严格校验
+│       ├── sts8203_parser.py       ← STS8203 .csv 解析 + 严格校验
 │       ├── dc_cleaner.py           ← FT-ALL 合并清洗 → RAW
 │       ├── pat_cleaner.py          ← RAW 参数 PAT 统计
 │       └── yield_report.py         ← SYL&SBL 良率分析
@@ -315,6 +316,7 @@ df = parse_dta_csv(file_path, ["IDSS", "VTH"], unique_only=False)
 | `_build_param_name()` | `csv_parser.py` | 构建增强参数名（seq/bias/unit） |
 | `_apply_unit_conversions()` | `base_cleaner.py` | 按 config 的换算表乘以因子 |
 | `parse_powertech_file()` | `dianji/powertech_parser.py` | 解析电基 PowerTECH 伪 `.xls` 文本 |
+| `parse_sts8203_file()` | `dianji/sts8203_parser.py` | 解析电基 STS8203 `.csv` 文件 |
 
 ---
 
@@ -376,6 +378,7 @@ python gui/main_window.py
 
 ## 🔄 版本历史
 
+- **v2.9.0** (2026-07-31)：电基 `FT-ALL` 新增 STS8203 CSV 自动识别；首个严格支持产品 `NCEAP40T20AGU(M)-7E00`，按终测 `QC_*` 参数组输出原有 21 列 RAW 契约，并继续使用产品主体流水目录。真实 `dj4` 文件从 34,608 条源记录保留 33,862 条有效 DVDS 记录。
 - **v2.8.2** (2026-07-22)：电基 `FT-ALL` 输出改为产品主体流水目录；例如完整产品 `NCEAP016N85LL(M)-3E00` 依次输出到 `NCEAP016N85LL(M)_001/_002`，清洗 Excel 与散点数据包放在同一目录且不覆盖历史结果。
 - **v2.8.1** (2026-07-22)：电基 `FT-ALL` 兼容已验证的新式 `FA65-5405` 批次命名；文件名与头部 `Lot:` 仍执行严格一致性校验，并通过 4 个真实 PowerTECH 文件的完整清洗验证。
 - **v2.8.0** (2026-07-22)：杰群 `DC-AI/DC-1/DC-统一CSV/DC-3` 与电基 `FT-ALL` 新增 FT 参数散点图；按源文件关联上下限和 Bias，规格随清洗单位同步换算，杰群 P 型反向 Min/Max 按数值上下界归一化且保留原始文本；GUI、发布包和真实数据验证同步完成。
@@ -906,6 +909,7 @@ Sigma, LCL\n计算值, UCL\n计算值, LCL\n更新前, UCL\n更新前, LCL\n更�
 | `factories/riyuexin/rg_cleaner.py` | `RGCleaner` | ASE RG cleaner |
 | `factories/riyuexin/pat_cleaner.py` | `build_pat`, `generate_pat` | 日月新标准 PAT 入口 |
 | `factories/dianji/powertech_parser.py` | `parse_powertech_file` | PowerTECH 文本解析、参数映射与格式校验 |
+| `factories/dianji/sts8203_parser.py` | `parse_sts8203_file` | STS8203 CSV 解析、终测参数映射与格式校验 |
 | `factories/dianji/dc_cleaner.py` | `DianjiDCCleaner` | 电基 FT-ALL 合并清洗并输出 `RAW` |
 | `factories/dianji/pat_cleaner.py` | `build_pat`, `generate_pat` | 电基 `RAW/RAW_n` PAT 入口 |
 | `shared/excel_utils.py` | `ExcelOptimizer` | calamine/xlsxwriter 引擎选择 |

@@ -171,7 +171,7 @@ class MainWindow(QMainWindow):
 def main():
     app = QApplication(sys.argv)
     app.setApplicationName("FT数据清洗工具")
-    app.setApplicationVersion("2.8.2")
+    app.setApplicationVersion("2.9.0")
 
     app.setStyleSheet("""
         QMainWindow{background:#f7fbfb;}
