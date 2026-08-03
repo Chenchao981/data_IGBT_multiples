@@ -24,8 +24,11 @@ from factories.dianji.config import (
     STS8203_EXPECTED_SOURCE_UNITS,
     STS8203_PRODUCT_OUTPUT_FIELDS,
     STS8203_SIGNATURE,
+    STS8203_SUPPORTED_LOT_DIGIT_COUNTS,
+    STS8203_SUPPORTED_LOT_SUFFIXES,
+    STS8203_SUPPORTED_SOURCE_SEGMENTS,
 )
-from factories.dianji.powertech_parser import DianjiFormatError, FileIdentity
+from factories.dianji.models import DianjiFormatError, FileIdentity
 
 
 @dataclass
@@ -42,18 +45,27 @@ class ParsedSTS8203File:
     source_format: str = "STS8203 CSV"
 
 
+@dataclass(frozen=True)
+class STS8203FilenameDetails:
+    identity: FileIdentity
+    test_time: datetime
+
+
+_MANUFACTURING_LOT_PATTERN = r"[mMrR]\d{8,9}-\d{3}(?:-[A-Za-z])?"
 _FILENAME_RE = re.compile(
     r"^(?P<product>.+)_Lot Id_"
-    r"(?P<manufacturing_lot>[mMrR]\d{8}-\d{3})\s+"
-    r"(?P<batch>[cC]\d{6}[.,，。]\d{2})_"
+    rf"(?P<manufacturing_lot>{_MANUFACTURING_LOT_PATTERN})\s+"
+    r"(?P<batch>[cC]\d{6}[.,，。]\d{2})"
+    r"(?:\s+(?P<source_segment>\d+))?_"
     r"(?P<label>ALL)_"
     r"(?P<date>\d{4}-\d{2}-\d{2})\s+"
     r"(?P<hour>\d{1,2})_(?P<minute>\d{2})_(?P<second>\d{2})$",
     flags=re.IGNORECASE,
 )
 _LOT_RE = re.compile(
-    r"^(?P<manufacturing_lot>[mMrR]\d{8}-\d{3})\s+"
-    r"(?P<batch>[cC]\d{6}[.,，。]\d{2})$"
+    rf"^(?P<manufacturing_lot>{_MANUFACTURING_LOT_PATTERN})\s+"
+    r"(?P<batch>[cC]\d{6}[.,，。]\d{2})"
+    r"(?:\s+(?P<source_segment>\d+))?$"
 )
 
 
@@ -70,29 +82,53 @@ def is_sts8203_csv_file(path: str | Path) -> bool:
 
 
 def parse_sts8203_filename(path_or_name: str | Path) -> FileIdentity:
+    return _parse_sts8203_filename_details(path_or_name).identity
+
+
+def _parse_sts8203_filename_details(
+    path_or_name: str | Path,
+) -> STS8203FilenameDetails:
     stem = Path(path_or_name).stem
     match = _FILENAME_RE.fullmatch(stem)
     if not match:
         raise DianjiFormatError(
             "电基 STS8203 文件名不符合 "
-            "'<产品>_Lot Id_<制造批次> <C...周记>_ALL_<日期 时_分_秒>.csv' 规则: "
+            "'<产品>_Lot Id_<制造批次> <C...周记> [分段号]_ALL_"
+            "<日期 时_分_秒>.csv' 规则: "
             f"{Path(path_or_name).name}"
         )
+    manufacturing_lot = match.group("manufacturing_lot").upper()
+    source_segment = match.group("source_segment")
+    _validate_lot_variant(
+        manufacturing_lot,
+        source_segment,
+        Path(path_or_name),
+        location="文件名",
+    )
     date = match.group("date")
     hour = int(match.group("hour"))
     minute = match.group("minute")
     second = match.group("second")
-    return FileIdentity(
-        product=match.group("product").strip(),
-        manufacturing_lot=match.group("manufacturing_lot").upper(),
-        batch=_normalize_batch(match.group("batch")),
-        test_tag=f"ALL{date.replace('-', '')}{hour:02d}{minute}{second}",
+    test_time = datetime.strptime(
+        f"{date} {hour:02d}:{minute}:{second}",
+        "%Y-%m-%d %H:%M:%S",
+    )
+    return STS8203FilenameDetails(
+        identity=FileIdentity(
+            product=match.group("product").strip(),
+            manufacturing_lot=manufacturing_lot,
+            batch=_normalize_batch(match.group("batch")),
+            test_tag=f"ALL{date.replace('-', '')}{hour:02d}{minute}{second}",
+            source_segment=source_segment,
+        ),
+        test_time=test_time,
     )
 
 
 def parse_sts8203_file(path: str | Path) -> ParsedSTS8203File:
     path = Path(path)
-    identity = parse_sts8203_filename(path.name)
+    filename_details = _parse_sts8203_filename_details(path.name)
+    identity = filename_details.identity
     output_fields = STS8203_PRODUCT_OUTPUT_FIELDS.get(identity.product)
     if output_fields is None:
         raise DianjiFormatError(
@@ -106,7 +142,9 @@ def parse_sts8203_file(path: str | Path) -> ParsedSTS8203File:
         raise DianjiFormatError(f"不是支持的 STS8203 CSV 文件: {path.name}")
 
     header_index = _locate_header(rows, path)
-    metadata_lot = _validate_metadata(lines[:header_index], identity, path)
+    metadata_lot = _validate_metadata(
+        lines[:header_index], filename_details, path
+    )
     header = _trim_trailing_empty(rows[header_index])
     units = _control_row(rows, header_index + 1, "Unit", path)
     low_limits = _control_row(rows, header_index + 2, "LimitL", path)
@@ -195,9 +233,10 @@ def _locate_header(rows: list[list[str]], path: Path) -> int:
 
 def _validate_metadata(
     metadata_lines: list[str],
-    identity: FileIdentity,
+    filename_details: STS8203FilenameDetails,
     path: Path,
 ) -> str:
+    identity = filename_details.identity
     metadata = {}
     for line in metadata_lines:
         if ":" not in line:
@@ -205,7 +244,7 @@ def _validate_metadata(
         key, value = line.split(":", 1)
         metadata[key.strip()] = value.strip()
 
-    required = ("Date", "Program", "Lot Id", "Beginning Time")
+    required = ("Date", "Program", "Lot Id", "Beginning Time", "Ending Time")
     missing = [key for key in required if not metadata.get(key)]
     if missing:
         raise DianjiFormatError(f"{path.name} 缺少 STS8203 元数据: {missing}")
@@ -216,8 +255,19 @@ def _validate_metadata(
         raise DianjiFormatError(f"{path.name} 的 Lot Id 格式无法识别: {lot_text}")
     metadata_lot = lot_match.group("manufacturing_lot").upper()
     metadata_batch = _normalize_batch(lot_match.group("batch"))
-    expected_lot = f"{identity.manufacturing_lot} {identity.batch}"
-    if metadata_lot != identity.manufacturing_lot or metadata_batch != identity.batch:
+    metadata_segment = lot_match.group("source_segment")
+    _validate_lot_variant(
+        metadata_lot,
+        metadata_segment,
+        path,
+        location="Lot Id 元数据",
+    )
+    expected_lot = _identity_lot_text(identity)
+    if (
+        metadata_lot != identity.manufacturing_lot
+        or metadata_batch != identity.batch
+        or metadata_segment != identity.source_segment
+    ):
         raise DianjiFormatError(
             f"{path.name} 的文件名与 Lot Id 元数据不一致: "
             f"filename={expected_lot}, Lot Id={lot_text}"
@@ -231,29 +281,78 @@ def _validate_metadata(
             f"filename={identity.product}, Program={program_name}"
         )
 
-    match = _FILENAME_RE.fullmatch(path.stem)
-    if match is None:
-        raise DianjiFormatError(f"{path.name} 的 STS8203 文件名无法重新校验")
-    filename_time = datetime.strptime(
-        f"{match.group('date')} {int(match.group('hour')):02d}:"
-        f"{match.group('minute')}:{match.group('second')}",
-        "%Y-%m-%d %H:%M:%S",
-    )
     try:
         metadata_time = datetime.strptime(
             metadata["Beginning Time"], "%Y-%m-%d %H:%M:%S"
         )
+        ending_time = datetime.strptime(
+            metadata["Ending Time"], "%Y-%m-%d %H:%M:%S"
+        )
     except ValueError as exc:
         raise DianjiFormatError(
-            f"{path.name} 的 Beginning Time 无法识别: {metadata['Beginning Time']}"
+            f"{path.name} 的测试时间元数据无法识别: "
+            f"Beginning Time={metadata['Beginning Time']}, "
+            f"Ending Time={metadata['Ending Time']}"
         ) from exc
-    if metadata["Date"] != match.group("date") or metadata_time != filename_time:
+    filename_time = filename_details.test_time
+    if metadata_time != filename_time:
         raise DianjiFormatError(
-            f"{path.name} 的文件名与测试时间元数据不一致: "
-            f"filename={filename_time}, Date={metadata['Date']}, "
+            f"{path.name} 的文件名与 Beginning Time 不一致: "
+            f"filename={filename_time}, "
             f"Beginning Time={metadata['Beginning Time']}"
         )
+    if ending_time < metadata_time:
+        raise DianjiFormatError(
+            f"{path.name} 的 Ending Time 早于 Beginning Time: "
+            f"{metadata['Beginning Time']} -> {metadata['Ending Time']}"
+        )
+    if metadata["Date"] != ending_time.strftime("%Y-%m-%d"):
+        raise DianjiFormatError(
+            f"{path.name} 的 Date 与 Ending Time 日期不一致: "
+            f"Date={metadata['Date']}, Ending Time={metadata['Ending Time']}"
+        )
     return lot_text
+
+
+def _validate_lot_variant(
+    manufacturing_lot: str,
+    source_segment: str | None,
+    path: Path,
+    *,
+    location: str,
+) -> None:
+    match = re.fullmatch(
+        r"[MR](?P<digits>\d+)-\d{3}(?:-(?P<suffix>[A-Z]))?",
+        manufacturing_lot.upper(),
+    )
+    if match is None:
+        raise DianjiFormatError(
+            f"{path.name} 的 {location} 制造批次无法识别: {manufacturing_lot}"
+        )
+    digit_count = len(match.group("digits"))
+    if digit_count not in STS8203_SUPPORTED_LOT_DIGIT_COUNTS:
+        raise DianjiFormatError(
+            f"{path.name} 的 {location} 制造批次位数未经验证: {digit_count}"
+        )
+    suffix = match.group("suffix")
+    if suffix is not None and suffix not in STS8203_SUPPORTED_LOT_SUFFIXES:
+        raise DianjiFormatError(
+            f"{path.name} 的 {location} 制造批次后缀未经验证: {suffix}"
+        )
+    if (
+        source_segment is not None
+        and source_segment not in STS8203_SUPPORTED_SOURCE_SEGMENTS
+    ):
+        raise DianjiFormatError(
+            f"{path.name} 的 {location} 分段号未经验证: {source_segment}"
+        )
+
+
+def _identity_lot_text(identity: FileIdentity) -> str:
+    values = [identity.manufacturing_lot, identity.batch]
+    if identity.source_segment is not None:
+        values.append(identity.source_segment)
+    return " ".join(values)
 
 
 def _control_row(

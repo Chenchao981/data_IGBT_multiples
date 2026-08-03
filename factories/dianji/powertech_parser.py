@@ -23,18 +23,7 @@ from factories.dianji.config import (
     TARGET_UNITS,
     UNIT_FACTORS,
 )
-
-
-class DianjiFormatError(ValueError):
-    """Raised when a source file cannot be safely mapped to the Dianji contract."""
-
-
-@dataclass(frozen=True)
-class FileIdentity:
-    product: str
-    manufacturing_lot: str
-    batch: str
-    test_tag: str
+from factories.dianji.models import DianjiFormatError, FileIdentity
 
 
 @dataclass(frozen=True)
@@ -66,6 +55,7 @@ class ParsedPowerTechFile:
     source_rows: int
     kept_rows: int
     invalid_marker_counts: dict[str, int]
+    source_format: str = "PowerTECH"
 
 
 _BATCH_PATTERN = r"(?:[cC]\d{6}[.,，。]\d{2}|[fF][aA]\d{2}-\d{4})"

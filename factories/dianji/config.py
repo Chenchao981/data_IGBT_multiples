@@ -18,6 +18,11 @@ SOURCE_ENCODINGS = ("utf-8-sig", "gb18030")
 # explicit, reviewed output mapping instead of a guessed generic mapping.
 STS8203_SIGNATURE = "STS8203 Station"
 STS8203_ENCODING = "utf-8-sig"
+# Verified filename/Lot Id variants.  Keep these explicit so a new tester-side
+# naming convention cannot silently change source identity.
+STS8203_SUPPORTED_LOT_DIGIT_COUNTS = frozenset({8, 9})
+STS8203_SUPPORTED_LOT_SUFFIXES = frozenset({"A"})
+STS8203_SUPPORTED_SOURCE_SEGMENTS = frozenset({"2"})
 STS8203_EXPECTED_COLUMN_COUNT = 63
 STS8203_EXPECTED_FIELD_INDEXES = {
     "SITE_NUM": 0,

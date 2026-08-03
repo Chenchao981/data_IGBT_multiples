@@ -47,6 +47,8 @@ data_IGBT_multiple/
 │
 │   └── dianji/                     ← 电基模块
 │       ├── config.py               ← PowerTECH/STS8203 布局、单位和输出顺序
+│       ├── models.py               ← 各格式共用身份与解析结果契约
+│       ├── source_registry.py      ← 内容签名识别 + 解析模块注册/分发
 │       ├── powertech_parser.py     ← 伪 .xls 文本解析 + 严格校验
 │       ├── sts8203_parser.py       ← STS8203 .csv 解析 + 严格校验
 │       ├── dc_cleaner.py           ← FT-ALL 合并清洗 → RAW
@@ -317,6 +319,7 @@ df = parse_dta_csv(file_path, ["IDSS", "VTH"], unique_only=False)
 | `_apply_unit_conversions()` | `base_cleaner.py` | 按 config 的换算表乘以因子 |
 | `parse_powertech_file()` | `dianji/powertech_parser.py` | 解析电基 PowerTECH 伪 `.xls` 文本 |
 | `parse_sts8203_file()` | `dianji/sts8203_parser.py` | 解析电基 STS8203 `.csv` 文件 |
+| `detect_dianji_source_format()` | `dianji/source_registry.py` | 按扩展名和内容签名自动选择独立解析模块 |
 
 ---
 
@@ -378,6 +381,7 @@ python gui/main_window.py
 
 ## 🔄 版本历史
 
+- **v2.9.1** (2026-08-03)：修复电基 `dj5/DC` STS8203 文件名兼容；严格支持已验证的 8/9 位制造批号、`-a` 片段后缀、批次后分段号 `2` 以及跨午夜 `Date=Ending Time` 元数据。新增 `models.py + source_registry.py` 注册式格式识别，PowerTECH/STS8203 各自独立解析；47 个真实文件完整清洗为 793,010 行、21 列、13 批次。
 - **v2.9.0** (2026-07-31)：电基 `FT-ALL` 新增 STS8203 CSV 自动识别；首个严格支持产品 `NCEAP40T20AGU(M)-7E00`，按终测 `QC_*` 参数组输出原有 21 列 RAW 契约，并继续使用产品主体流水目录。真实 `dj4` 文件从 34,608 条源记录保留 33,862 条有效 DVDS 记录。
 - **v2.8.2** (2026-07-22)：电基 `FT-ALL` 输出改为产品主体流水目录；例如完整产品 `NCEAP016N85LL(M)-3E00` 依次输出到 `NCEAP016N85LL(M)_001/_002`，清洗 Excel 与散点数据包放在同一目录且不覆盖历史结果。
 - **v2.8.1** (2026-07-22)：电基 `FT-ALL` 兼容已验证的新式 `FA65-5405` 批次命名；文件名与头部 `Lot:` 仍执行严格一致性校验，并通过 4 个真实 PowerTECH 文件的完整清洗验证。
@@ -910,6 +914,8 @@ Sigma, LCL\n计算值, UCL\n计算值, LCL\n更新前, UCL\n更新前, LCL\n更�
 | `factories/riyuexin/pat_cleaner.py` | `build_pat`, `generate_pat` | 日月新标准 PAT 入口 |
 | `factories/dianji/powertech_parser.py` | `parse_powertech_file` | PowerTECH 文本解析、参数映射与格式校验 |
 | `factories/dianji/sts8203_parser.py` | `parse_sts8203_file` | STS8203 CSV 解析、终测参数映射与格式校验 |
+| `factories/dianji/models.py` | `FileIdentity`, `ParsedDianjiSource` | 多格式共用身份及解析结果契约 |
+| `factories/dianji/source_registry.py` | `detect_dianji_source_format`, `parse_dianji_source_file` | 注册式内容识别与解析模块分发 |
 | `factories/dianji/dc_cleaner.py` | `DianjiDCCleaner` | 电基 FT-ALL 合并清洗并输出 `RAW` |
 | `factories/dianji/pat_cleaner.py` | `build_pat`, `generate_pat` | 电基 `RAW/RAW_n` PAT 入口 |
 | `shared/excel_utils.py` | `ExcelOptimizer` | calamine/xlsxwriter 引擎选择 |

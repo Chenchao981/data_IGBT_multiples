@@ -15,6 +15,10 @@ from factories.dianji.config import (
 )
 from factories.dianji.dc_cleaner import DianjiDCCleaner
 from factories.dianji.powertech_parser import DianjiFormatError
+from factories.dianji.source_registry import (
+    SOURCE_FORMATS,
+    detect_dianji_source_format,
+)
 from factories.dianji.sts8203_parser import (
     parse_sts8203_file,
     parse_sts8203_filename,
@@ -22,6 +26,7 @@ from factories.dianji.sts8203_parser import (
 
 
 PRODUCT = "NCEAP40T20AGU(M)-7E00"
+_UNSET = object()
 
 
 def _make_source(
@@ -31,14 +36,26 @@ def _make_source(
     batch: str = "c163464.02",
     metadata_lot: str | None = None,
     metadata_batch: str | None = None,
+    source_segment: str | None = None,
+    metadata_source_segment: str | None | object = _UNSET,
     changed_field: tuple[int, str] | None = None,
     encoding: str = "utf-8-sig",
+    filename_timestamp: str = "2025-09-11 2_30_44",
+    metadata_date: str = "2025-09-11",
+    beginning_time: str = "2025-09-11 2:30:44",
+    ending_time: str = "2025-09-11 2:31:00",
 ) -> Path:
     metadata_lot = metadata_lot or manufacturing_lot
     metadata_batch = metadata_batch or batch
+    if metadata_source_segment is _UNSET:
+        metadata_source_segment = source_segment
+    filename_segment = f"  {source_segment}" if source_segment else ""
+    metadata_segment = (
+        f"   {metadata_source_segment}" if metadata_source_segment else ""
+    )
     path = directory / (
-        f"{PRODUCT}_Lot Id_{manufacturing_lot} {batch}"
-        "_ALL_2025-09-11 2_30_44.csv"
+        f"{PRODUCT}_Lot Id_{manufacturing_lot} {batch}{filename_segment}"
+        f"_ALL_{filename_timestamp}.csv"
     )
 
     header = [f"UNUSED_{index}" for index in range(STS8203_EXPECTED_COLUMN_COUNT)]
@@ -95,15 +112,16 @@ def _make_source(
     buffer = io.StringIO(newline="")
     metadata_lines = [
         "STS8203 StationA",
-        "Date:2025-09-11",
+        f"Date:{metadata_date}",
         "Tester ID:",
         "User:admin",
         f"Program:D:\\EUIT_Prgorm_A\\{PRODUCT}_ALL_M07M08_Ver1.05.pgs",
         "Handler: MultiTaskHandler.dll",
         "Site: All Sites",
-        f"Lot Id:{metadata_lot} {metadata_batch} ",
+        f"Lot Id:{metadata_lot} {metadata_batch}{metadata_segment} ",
         "",
-        "Beginning Time: 2025-09-11 2:30:44",
+        f"Beginning Time: {beginning_time}",
+        f"Ending Time: {ending_time}",
         "",
     ]
     buffer.write("\r\n".join(metadata_lines))
@@ -131,6 +149,35 @@ class STS8203FilenameTests(unittest.TestCase):
         self.assertEqual(identity.manufacturing_lot, "M25081416-001")
         self.assertEqual(identity.batch, "C163464.02")
         self.assertEqual(identity.test_tag, "ALL20250911023044")
+        self.assertIsNone(identity.source_segment)
+
+    def test_accepts_verified_dj5_lot_and_segment_variants(self):
+        segmented = parse_sts8203_filename(
+            f"{PRODUCT}_Lot Id_M250619006-001 C159126.03  2"
+            "_ALL_2025-07-07 0_07_35.csv"
+        )
+        self.assertEqual(segmented.manufacturing_lot, "M250619006-001")
+        self.assertEqual(segmented.batch, "C159126.03")
+        self.assertEqual(segmented.source_segment, "2")
+
+        suffixed = parse_sts8203_filename(
+            f"{PRODUCT}_Lot Id_m250710015-002-a c163464.00"
+            "_ALL_2025-08-25 9_32_13.csv"
+        )
+        self.assertEqual(suffixed.manufacturing_lot, "M250710015-002-A")
+        self.assertIsNone(suffixed.source_segment)
+
+    def test_rejects_unreviewed_segment_and_lot_suffix(self):
+        with self.assertRaisesRegex(DianjiFormatError, "分段号未经验证"):
+            parse_sts8203_filename(
+                f"{PRODUCT}_Lot Id_M250619006-001 C159126.03  3"
+                "_ALL_2025-07-07 0_07_35.csv"
+            )
+        with self.assertRaisesRegex(DianjiFormatError, "后缀未经验证"):
+            parse_sts8203_filename(
+                f"{PRODUCT}_Lot Id_M250710015-002-b C163464.00"
+                "_ALL_2025-08-25 9_32_13.csv"
+            )
 
 
 class STS8203ParserTests(unittest.TestCase):
@@ -167,6 +214,53 @@ class STS8203ParserTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as temp:
             path = _make_source(Path(temp), metadata_batch="C163465.02")
             with self.assertRaisesRegex(DianjiFormatError, "Lot Id 元数据不一致"):
+                parse_sts8203_file(path)
+
+    def test_accepts_matching_segment_and_rejects_metadata_segment_mismatch(self):
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            parsed = parse_sts8203_file(
+                _make_source(
+                    root,
+                    manufacturing_lot="M250619006-001",
+                    batch="C159126.03",
+                    source_segment="2",
+                )
+            )
+            self.assertEqual(parsed.identity.source_segment, "2")
+
+        with tempfile.TemporaryDirectory() as temp:
+            path = _make_source(
+                Path(temp),
+                manufacturing_lot="M250619006-001",
+                batch="C159126.03",
+                source_segment="2",
+                metadata_source_segment=None,
+            )
+            with self.assertRaisesRegex(DianjiFormatError, "Lot Id 元数据不一致"):
+                parse_sts8203_file(path)
+
+    def test_accepts_cross_midnight_date_as_ending_date(self):
+        with tempfile.TemporaryDirectory() as temp:
+            parsed = parse_sts8203_file(
+                _make_source(
+                    Path(temp),
+                    filename_timestamp="2025-09-11 23_30_44",
+                    metadata_date="2025-09-12",
+                    beginning_time="2025-09-11 23:30:44",
+                    ending_time="2025-09-12 0:30:00",
+                )
+            )
+        self.assertEqual(parsed.kept_rows, 2)
+
+    def test_rejects_date_that_is_not_ending_date(self):
+        with tempfile.TemporaryDirectory() as temp:
+            path = _make_source(
+                Path(temp),
+                metadata_date="2025-09-12",
+                ending_time="2025-09-11 2:31:00",
+            )
+            with self.assertRaisesRegex(DianjiFormatError, "Date 与 Ending Time"):
                 parse_sts8203_file(path)
 
     def test_rejects_changed_qc_schema(self):
@@ -262,6 +356,39 @@ class STS8203CleanerTests(unittest.TestCase):
                 cleaner.last_scatter_manifest.parent,
                 cleaner.last_output_file.parent,
             )
+
+
+class DianjiSourceRegistryTests(unittest.TestCase):
+    def test_registry_keeps_each_format_in_its_own_parser_module(self):
+        handlers = {handler.key: handler for handler in SOURCE_FORMATS}
+        self.assertEqual(
+            handlers["powertech_text"].parser.__module__,
+            "factories.dianji.powertech_parser",
+        )
+        self.assertEqual(
+            handlers["sts8203_csv"].parser.__module__,
+            "factories.dianji.sts8203_parser",
+        )
+
+    def test_detects_registered_format_by_extension_and_signature(self):
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            sts_path = _make_source(root)
+            powertech_path = root / "source.xls"
+            powertech_path.write_bytes(b"PowerTECH Test System\tStation")
+            unknown_path = root / "unknown.csv"
+            unknown_path.write_text("ordinary,csv\n", encoding="utf-8")
+
+            self.assertEqual(
+                detect_dianji_source_format(sts_path).key,
+                "sts8203_csv",
+            )
+            self.assertEqual(
+                detect_dianji_source_format(powertech_path).key,
+                "powertech_text",
+            )
+            with self.assertRaisesRegex(DianjiFormatError, "无法识别"):
+                detect_dianji_source_format(unknown_path)
 
 
 if __name__ == "__main__":

@@ -17,18 +17,14 @@ from factories.base.base_cleaner import BaseCleaner
 from factories.dianji.config import (
     DATA_TYPES,
     FACTORY_NAME,
-    FILE_EXTS,
     OUTPUT_FILE_SUFFIX,
     OUTPUT_SHEET_NAME,
 )
-from factories.dianji.powertech_parser import (
-    DianjiFormatError,
-    is_powertech_text_file,
-    parse_powertech_file,
-)
-from factories.dianji.sts8203_parser import (
-    is_sts8203_csv_file,
-    parse_sts8203_file,
+from factories.dianji.models import DianjiFormatError
+from factories.dianji.source_registry import (
+    SUPPORTED_SOURCE_EXTENSIONS,
+    detect_dianji_source_format,
+    parse_dianji_source_file,
 )
 from shared.excel_utils import create_output_run_dir, write_excel_fast
 
@@ -59,18 +55,19 @@ class DianjiDCCleaner(BaseCleaner):
             path
             for path in self.input_dir.rglob("*")
             if path.is_file()
-            and path.suffix.lower() in FILE_EXTS
+            and path.suffix.lower() in SUPPORTED_SOURCE_EXTENSIONS
             and not path.name.startswith("~$")
         )
         if not files:
             raise FileNotFoundError(
                 f"未在 {self.input_dir} 找到电基 PowerTECH .xls 或 STS8203 .csv 文件"
             )
-        unsupported = [
-            path.name
-            for path in files
-            if not is_powertech_text_file(path) and not is_sts8203_csv_file(path)
-        ]
+        unsupported = []
+        for path in files:
+            try:
+                detect_dianji_source_format(path)
+            except DianjiFormatError as exc:
+                unsupported.append(f"{path.name} ({exc})")
         if unsupported:
             raise DianjiFormatError(
                 "输入目录混有不支持的电基 .xls/.csv 文件，请分开选择目录: "
@@ -95,14 +92,14 @@ class DianjiDCCleaner(BaseCleaner):
             logger.info(
                 "已解析 %s [%s]: 源记录=%s, 保留=%s, 批次=%s",
                 path.name,
-                getattr(parsed, "source_format", "PowerTECH"),
+                parsed.source_format,
                 parsed.source_rows,
                 parsed.kept_rows,
                 parsed.identity.batch,
             )
 
         source_formats = {
-            getattr(parsed, "source_format", "PowerTECH")
+            parsed.source_format
             for parsed in parsed_files
         }
         if len(source_formats) != 1:
@@ -173,7 +170,7 @@ class DianjiDCCleaner(BaseCleaner):
             "product": product,
             "source_formats": dict(
                 Counter(
-                    getattr(parsed, "source_format", "PowerTECH")
+                    parsed.source_format
                     for parsed in parsed_files
                 )
             ),
@@ -204,16 +201,6 @@ def next_output_path(output_dir: str | Path, product: str) -> Path:
     """Create '<product family>_NNN' and place the RAW workbook inside it."""
     run_dir = create_output_run_dir(output_dir, [output_product_name(product)])
     return run_dir / f"{product}{OUTPUT_FILE_SUFFIX}"
-
-
-def parse_dianji_source_file(path: str | Path):
-    """Dispatch one verified Dianji source by its content signature."""
-    path = Path(path)
-    if is_powertech_text_file(path):
-        return parse_powertech_file(path)
-    if is_sts8203_csv_file(path):
-        return parse_sts8203_file(path)
-    raise DianjiFormatError(f"不支持的电基源文件格式: {path.name}")
 
 
 def output_product_name(product: str) -> str:
