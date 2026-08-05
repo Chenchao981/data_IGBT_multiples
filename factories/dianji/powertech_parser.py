@@ -13,13 +13,15 @@ from pathlib import Path
 import pandas as pd
 
 from factories.dianji.config import (
-    EXPECTED_ITEM_BASES,
     EXPECTED_ITEM_COUNTS,
     INVALID_NUMERIC_MARKERS,
-    REQUIRED_ITEM_NUMBERS,
+    POWERTECH_BATCH_PATTERN,
+    POWERTECH_ITEM_LAYOUTS,
+    POWERTECH_MANUFACTURING_LOT_PATTERN,
+    POWERTECH_TEST_TAG_PATTERN,
+    PowerTechItemLayout,
     SOURCE_ENCODINGS,
     SOURCE_SIGNATURE,
-    SUPPORTED_TAIL_LAYOUTS,
     TARGET_UNITS,
     UNIT_FACTORS,
 )
@@ -58,15 +60,17 @@ class ParsedPowerTechFile:
     source_format: str = "PowerTECH"
 
 
-_BATCH_PATTERN = r"(?:[cC]\d{6}[.,，。]\d{2}|[fF][aA]\d{2}-\d{4})"
 _FILENAME_RE = re.compile(
-    r"^(?P<product>.+)_(?P<manufacturing_lot>[mMrR]\d{9}-\d{3})\s+"
-    rf"(?P<batch>{_BATCH_PATTERN})\s*"
-    r"(?P<test_tag>(?:[A-Za-z]+)?\d{12})$"
+    r"^(?P<product>.+)_"
+    rf"(?P<manufacturing_lot>{POWERTECH_MANUFACTURING_LOT_PATTERN})\s*"
+    rf"(?P<batch>{POWERTECH_BATCH_PATTERN})\s*"
+    rf"(?P<test_tag>{POWERTECH_TEST_TAG_PATTERN})$",
+    flags=re.IGNORECASE,
 )
 _LOT_RE = re.compile(
-    r"(?P<manufacturing_lot>[mMrR]\d{9}-\d{3})\s+"
-    rf"(?P<batch>{_BATCH_PATTERN})"
+    rf"(?P<manufacturing_lot>{POWERTECH_MANUFACTURING_LOT_PATTERN})\s*"
+    rf"(?P<batch>{POWERTECH_BATCH_PATTERN})",
+    flags=re.IGNORECASE,
 )
 _ITEM_RE = re.compile(r"^(?P<number>\d+)\s+(?P<name>.+?)\s*$")
 
@@ -78,14 +82,14 @@ def parse_dianji_filename(path_or_name: str | Path) -> FileIdentity:
     if not match:
         raise DianjiFormatError(
             "电基文件名不符合 '<产品>_<M/R制造批次> <C...周记/FA...批次>"
-            "[标签]<测试时间>.xls' 规则: "
+            "[标签]<测试时间>.xls' 规则（已验证可选 -A-A、DC M08 标签和无空格变体）: "
             f"{Path(path_or_name).name}"
         )
     return FileIdentity(
         product=match.group("product").strip(),
         manufacturing_lot=match.group("manufacturing_lot").upper(),
         batch=_normalize_batch(match.group("batch")),
-        test_tag=match.group("test_tag").upper(),
+        test_tag=re.sub(r"\s+", " ", match.group("test_tag")).upper(),
     )
 
 
@@ -111,8 +115,8 @@ def parse_powertech_file(path: str | Path) -> ParsedPowerTechFile:
     metadata_lot, lot_identity_warning = _validate_metadata_lot(
         rows, labels["Serial#"], identity, path
     )
-    items = _build_test_items(rows, labels, path)
-    output_columns = _build_output_columns(items, path)
+    items, item_layout = _build_test_items(rows, labels, path)
+    output_columns = _build_output_columns(items, item_layout, path)
     specs = _build_scatter_specs(rows, labels, output_columns, identity, path)
 
     records: list[list[float | str]] = []
@@ -208,8 +212,8 @@ def _validate_metadata_lot(
     ):
         return lot_text, None
 
-    filename_main_lot = identity.manufacturing_lot.rsplit("-", 1)[0]
-    metadata_main_lot = metadata_manufacturing_lot.rsplit("-", 1)[0]
+    filename_main_lot = _manufacturing_main_lot(identity.manufacturing_lot)
+    metadata_main_lot = _manufacturing_main_lot(metadata_manufacturing_lot)
     if metadata_batch != identity.batch or metadata_main_lot != filename_main_lot:
         raise DianjiFormatError(
             f"{path.name} 的文件名与 Lot 元数据不一致: filename={expected}, Lot={lot_text}"
@@ -226,9 +230,16 @@ def _normalize_batch(value: str) -> str:
     return value.upper().replace(",", ".").replace("，", ".").replace("。", ".")
 
 
+def _manufacturing_main_lot(value: str) -> str:
+    match = re.match(r"^[MR]\d{9}", value.upper())
+    if match is None:
+        return value.upper()
+    return match.group(0)
+
+
 def _build_test_items(
     rows: list[list[str]], labels: dict[str, int], path: Path
-) -> list[TestItem]:
+) -> tuple[list[TestItem], PowerTechItemLayout]:
     item_row = rows[labels["Item Name"]]
     bias1 = rows[labels["Bias1"]]
     bias2 = rows[labels["Bias2"]]
@@ -258,23 +269,7 @@ def _build_test_items(
         raise DianjiFormatError(f"{path.name} 的 Item 编号重复")
 
     by_number = {item.item_no: item for item in items}
-    missing_numbers = [number for number in REQUIRED_ITEM_NUMBERS if number not in by_number]
-    if missing_numbers:
-        raise DianjiFormatError(f"{path.name} 缺少输出所需 Item: {missing_numbers}")
-    for number, expected_bases in EXPECTED_ITEM_BASES.items():
-        actual = by_number[number].base_name
-        if actual not in expected_bases:
-            raise DianjiFormatError(
-                f"{path.name} 的 Item #{number} 应为 {sorted(expected_bases)}，实际为 {actual}"
-            )
-
-    actual_tail_layout = tuple(
-        (number, by_number[number].base_name) for number in (29, 30, 31)
-    )
-    if actual_tail_layout not in SUPPORTED_TAIL_LAYOUTS:
-        raise DianjiFormatError(
-            f"{path.name} 的 Item #29-31 布局未经验证: {actual_tail_layout}"
-        )
+    item_layout = _detect_item_layout(items, by_number, path)
 
     counts = Counter(item.base_name for item in items)
     for base_name, expected_count in EXPECTED_ITEM_COUNTS.items():
@@ -283,10 +278,60 @@ def _build_test_items(
             raise DianjiFormatError(
                 f"{path.name} 的 {base_name} 测试项数量应为 {expected_count}，实际为 {actual_count}"
             )
-    return items
+    return items, item_layout
 
 
-def _build_output_columns(items: list[TestItem], path: Path) -> list[OutputColumn]:
+def _detect_item_layout(
+    items: list[TestItem],
+    by_number: dict[int, TestItem],
+    path: Path,
+) -> PowerTechItemLayout:
+    failures = []
+    for layout in POWERTECH_ITEM_LAYOUTS:
+        if len(items) != layout.item_count:
+            failures.append(
+                f"{layout.name}: Item 数量 {len(items)} != {layout.item_count}"
+            )
+            continue
+        expected_numbers = list(range(1, layout.item_count + 1))
+        actual_numbers = [item.item_no for item in items]
+        if actual_numbers != expected_numbers:
+            failures.append(
+                f"{layout.name}: Item 编号不连续，实际={actual_numbers}"
+            )
+            continue
+        mismatch = next(
+            (
+                (number, expected_bases, by_number[number].base_name)
+                for number, expected_bases in layout.expected_item_bases.items()
+                if by_number[number].base_name not in expected_bases
+            ),
+            None,
+        )
+        if mismatch is not None:
+            number, expected_bases, actual = mismatch
+            failures.append(
+                f"{layout.name}: Item #{number} 应为 {sorted(expected_bases)}，实际为 {actual}"
+            )
+            continue
+        actual_tail = tuple(
+            by_number[number].base_name for number in layout.tail_item_numbers
+        )
+        if actual_tail not in layout.supported_tail_bases:
+            failures.append(
+                f"{layout.name}: Item {layout.tail_item_numbers} 尾部布局未经验证: {actual_tail}"
+            )
+            continue
+        return layout
+
+    raise DianjiFormatError(
+        f"{path.name} 的 PowerTECH Item 布局未经验证: " + "；".join(failures)
+    )
+
+
+def _build_output_columns(
+    items: list[TestItem], item_layout: PowerTechItemLayout, path: Path
+) -> list[OutputColumn]:
     by_number = {item.item_no: item for item in items}
     vth_numbers = {
         item.item_no: index
@@ -300,7 +345,7 @@ def _build_output_columns(items: list[TestItem], path: Path) -> list[OutputColum
             [item for item in items if item.base_name == "BVDSS"], start=1
         )
     }
-    output_item_numbers = _ordered_output_item_numbers(by_number, path)
+    output_item_numbers = _ordered_output_item_numbers(by_number, item_layout, path)
     columns = [
         _make_output_column(by_number[number], vth_numbers, bvdss_numbers, by_number, path)
         for number in output_item_numbers
@@ -371,15 +416,20 @@ def _parse_limit_value(value: str, factor: float) -> float | None:
 
 
 def _ordered_output_item_numbers(
-    items_by_number: dict[int, TestItem], path: Path
+    items_by_number: dict[int, TestItem],
+    item_layout: PowerTechItemLayout,
+    path: Path,
 ) -> list[int]:
-    """Return one stable RAW order for both verified item 29-31 layouts."""
-    tail_items = [items_by_number[number] for number in (29, 30, 31)]
+    """Return one stable RAW order for every explicitly verified layout."""
+    tail_items = [
+        items_by_number[number] for number in item_layout.tail_item_numbers
+    ]
     idss_items = [item for item in tail_items if item.base_name == "IDSS"]
     igss_items = [item for item in tail_items if item.base_name == "IGSS"]
     if len(idss_items) != 1 or len(igss_items) != 2:
         raise DianjiFormatError(
-            f"{path.name} 的 Item #29-31 必须包含 1 个 IDSS 和 2 个 IGSS"
+            f"{path.name} 的 {item_layout.name} 尾部 Item "
+            f"{item_layout.tail_item_numbers} 必须包含 1 个 IDSS 和 2 个 IGSS"
         )
 
     igss_with_conditions = [
@@ -395,16 +445,16 @@ def _ordered_output_item_numbers(
     magnitudes = {condition.lstrip("+-") for _, condition in igss_with_conditions}
     if len(negative_igss) != 1 or len(positive_igss) != 1 or len(magnitudes) != 1:
         raise DianjiFormatError(
-            f"{path.name} 的 Item #29-31 IGSS 必须是一组正负对称 VGS 条件: "
+            f"{path.name} 的 {item_layout.name} 尾部 IGSS 必须是一组正负对称 VGS 条件: "
             f"{[(item.item_no, condition) for item, condition in igss_with_conditions]}"
         )
 
     return [
-        4, 12, 16, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28,
+        *item_layout.output_prefix,
         negative_igss[0].item_no,
         positive_igss[0].item_no,
         idss_items[0].item_no,
-        32, 33, 34,
+        *item_layout.output_suffix,
     ]
 
 

@@ -3,6 +3,8 @@
 
 """Dianji factory configuration."""
 
+from dataclasses import dataclass
+
 FACTORY_NAME = "电基"
 FACTORY_NAME_EN = "Dianji"
 DATA_TYPES = ["FT-ALL"]
@@ -12,6 +14,13 @@ FILE_EXTS = (".xls", ".csv")
 # PowerTECH writes a GB18030/tab-delimited text report but uses an .xls suffix.
 SOURCE_SIGNATURE = "PowerTECH Test System"
 SOURCE_ENCODINGS = ("utf-8-sig", "gb18030")
+
+# Verified PowerTECH identity variants.  The optional ``-A-A`` suffix and
+# ``DC M08`` test tag come from the reviewed dj6 corpus; keep them explicit so
+# unrelated tester-side naming changes still fail closed.
+POWERTECH_MANUFACTURING_LOT_PATTERN = r"[mMrR]\d{9}-\d{3}(?:-[aA]-[aA])?"
+POWERTECH_BATCH_PATTERN = r"(?:[cC]\d{6}[.,，。]\d{2}|[fF][aA]\d{2}-\d{4})"
+POWERTECH_TEST_TAG_PATTERN = r"(?:(?:[A-Za-z]+)|(?:DC\s+M08))?\d{12}"
 
 # STS8203 writes a real UTF-8 CSV with metadata before the CSV header.  The
 # source does not expose Bias voltages, so every supported product needs an
@@ -98,60 +107,87 @@ STS8203_PRODUCT_OUTPUT_FIELDS = {
 OUTPUT_SHEET_NAME = "RAW"
 OUTPUT_FILE_SUFFIX = " DJ PAT.xlsx"
 
-# Required PowerTECH item numbers.  The parser derives the final business order
-# from parameter names and bias conditions because verified test programs use
-# two different arrangements for items 29-31.
-REQUIRED_ITEM_NUMBERS = (
-    4,   # DVDS_EX
-    12,  # LCR-RG
-    16,  # VTH1 (the first VTH, item 14, is a fixture/program placeholder)
-    19,  # VTH2
-    20,  # BVDSS1
-    21,  # BVDSS2
-    22,  # first IDSS
-    23,  # IGSS +25V
-    24,  # IGSS -25V -> ISGS25
-    25,  # IGSS +20V
-    26,  # IGSS -20V -> ISGS20
-    27,  # RDON
-    28,  # VFSD
-    29,  # second IDSS or IGSS -10V, depending on the verified program layout
-    30,  # IGSS +10V
-    31,  # IGSS -10V or second IDSS, depending on the verified program layout
-    32,  # VTH3
-    33,  # DELTA BV
-    34,  # DELTA VTH
+@dataclass(frozen=True)
+class PowerTechItemLayout:
+    """One explicitly reviewed PowerTECH Item-number layout."""
+
+    name: str
+    item_count: int
+    expected_item_bases: dict[int, frozenset[str]]
+    output_prefix: tuple[int, ...]
+    tail_item_numbers: tuple[int, int, int]
+    supported_tail_bases: frozenset[tuple[str, str, str]]
+    output_suffix: tuple[int, ...]
+
+
+# The original program has two verified Item 29-31 permutations.  The dj6
+# compact program removes two SAME placeholders (old Items 17-18), shifting all
+# later business Items down by two while retaining the same 19 output values.
+POWERTECH_ITEM_LAYOUTS = (
+    PowerTechItemLayout(
+        name="standard-34",
+        item_count=34,
+        expected_item_bases={
+            4: frozenset({"DVDS", "DVDS_EX"}),
+            12: frozenset({"LCR-RG"}),
+            16: frozenset({"VTH"}),
+            19: frozenset({"VTH"}),
+            20: frozenset({"BVDSS"}),
+            21: frozenset({"BVDSS"}),
+            22: frozenset({"IDSS"}),
+            23: frozenset({"IGSS"}),
+            24: frozenset({"IGSS"}),
+            25: frozenset({"IGSS"}),
+            26: frozenset({"IGSS"}),
+            27: frozenset({"RDON"}),
+            28: frozenset({"VFSD"}),
+            29: frozenset({"IDSS", "IGSS"}),
+            30: frozenset({"IGSS"}),
+            31: frozenset({"IDSS", "IGSS"}),
+            32: frozenset({"VTH"}),
+            33: frozenset({"DELTA"}),
+            34: frozenset({"DELTA"}),
+        },
+        output_prefix=(4, 12, 16, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28),
+        tail_item_numbers=(29, 30, 31),
+        supported_tail_bases=frozenset(
+            {
+                ("IDSS", "IGSS", "IGSS"),
+                ("IGSS", "IGSS", "IDSS"),
+            }
+        ),
+        output_suffix=(32, 33, 34),
+    ),
+    PowerTechItemLayout(
+        name="compact-32",
+        item_count=32,
+        expected_item_bases={
+            4: frozenset({"DVDS", "DVDS_EX"}),
+            12: frozenset({"LCR-RG"}),
+            16: frozenset({"VTH"}),
+            17: frozenset({"VTH"}),
+            18: frozenset({"BVDSS"}),
+            19: frozenset({"BVDSS"}),
+            20: frozenset({"IDSS"}),
+            21: frozenset({"IGSS"}),
+            22: frozenset({"IGSS"}),
+            23: frozenset({"IGSS"}),
+            24: frozenset({"IGSS"}),
+            25: frozenset({"RDON"}),
+            26: frozenset({"VFSD"}),
+            27: frozenset({"IGSS"}),
+            28: frozenset({"IGSS"}),
+            29: frozenset({"IDSS"}),
+            30: frozenset({"VTH"}),
+            31: frozenset({"DELTA"}),
+            32: frozenset({"DELTA"}),
+        },
+        output_prefix=(4, 12, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26),
+        tail_item_numbers=(27, 28, 29),
+        supported_tail_bases=frozenset({("IGSS", "IGSS", "IDSS")}),
+        output_suffix=(30, 31, 32),
+    ),
 )
-
-EXPECTED_ITEM_BASES = {
-    4: {"DVDS", "DVDS_EX"},
-    12: {"LCR-RG"},
-    16: {"VTH"},
-    19: {"VTH"},
-    20: {"BVDSS"},
-    21: {"BVDSS"},
-    22: {"IDSS"},
-    23: {"IGSS"},
-    24: {"IGSS"},
-    25: {"IGSS"},
-    26: {"IGSS"},
-    27: {"RDON"},
-    28: {"VFSD"},
-    29: {"IDSS", "IGSS"},
-    30: {"IGSS"},
-    31: {"IDSS", "IGSS"},
-    32: {"VTH"},
-    33: {"DELTA"},
-    34: {"DELTA"},
-}
-
-# Only these two item 29-31 layouts have been verified from real PowerTECH
-# exports.  Counts alone are insufficient because they could accept a third,
-# unverified permutation and silently change the RAW column meaning.
-SUPPORTED_TAIL_LAYOUTS = {
-    ((29, "IDSS"), (30, "IGSS"), (31, "IGSS")),
-    ((29, "IGSS"), (30, "IGSS"), (31, "IDSS")),
-}
 
 EXPECTED_ITEM_COUNTS = {
     "DVDS_EX": 1,

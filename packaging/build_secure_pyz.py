@@ -14,7 +14,7 @@ import glob
 import fnmatch
 from pathlib import Path
 
-VERSION = '2.9.1'
+VERSION = '2.9.2'
 
 # --- Configuration ---
 # Project root
@@ -224,8 +224,9 @@ Notes:
 - For Jiequn DC-3, select the third-line DC1 root or a product directory.
 - Dianji FT-ALL uses a format registry to detect verified PowerTECH .xls text and STS8203 .csv sources, then dispatches to the matching parser module.
 - Dianji batch IDs accept the verified C203133.03 week-code and FA65-5405 formats, with strict filename/Lot identity checks.
+- Dianji PowerTECH also accepts the reviewed dj6 no-space lot/batch form, -A-A lot suffix, DC M08 test tag, and compact 32-Item program; unknown variants remain rejected.
 - Dianji FT-ALL stores each run in a numbered product-family folder such as NCEAP016N85LL(M)_001.
-- Dianji supports both verified item 29-31 layouts and restores one stable RAW column order.
+- Dianji restores one stable RAW order across both standard Item 29-31 permutations and the reviewed compact 32-Item mapping.
 - Dianji STS8203 supports the reviewed NCEAP40T20AGU(M)-7E00 layout, including verified 8/9-digit manufacturing lots, suffix -a, source segment 2, and cross-day tests whose Date matches Ending Time; unreviewed variants are rejected.
 - PAT accepts one or more cleaned Excel files; Dianji uses RAW/RAW_n sheets, while ASE/Jiequn use DC/DVDS/RG_Data sheets.
 - SYL&SBL accepts one .xls or .xlsx yield workbook.

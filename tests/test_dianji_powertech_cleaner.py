@@ -1,6 +1,7 @@
 import tempfile
 import unittest
 from pathlib import Path
+import re
 
 import pandas as pd
 
@@ -38,7 +39,10 @@ def _make_source(
     metadata_batch=None,
     item_names=None,
     verified_tail_variant=False,
+    compact_layout=False,
 ):
+    if compact_layout:
+        verified_tail_variant = True
     item_names = list(item_names or ITEM_NAMES)
     if verified_tail_variant:
         item_names[28] = "IGSS"
@@ -151,8 +155,39 @@ def _make_source(
         "\t".join(early_failure),
         "\t".join(sentinel),
     ]
+    if compact_layout:
+        lines = _to_compact_32_layout(lines)
     path.write_text("\r\n".join(lines), encoding="gb18030")
     return path
+
+
+def _to_compact_32_layout(lines):
+    """Remove verified SAME Items 17-18 and renumber later test Items."""
+    shaped_rows = {
+        "Item Name", "Bias1", "Bias2", "Bias3", "Min Limit", "Max Limit",
+        "Serial#",
+    }
+    reference_map = {19: 17, 20: 18, 21: 19}
+    compact = []
+    for line in lines:
+        fields = line.split("\t")
+        if len(fields) > 20 and (fields[0] in shaped_rows or fields[0].isdigit()):
+            del fields[19:21]
+            if fields[0] == "Item Name":
+                for item_number, index in enumerate(range(3, len(fields)), start=1):
+                    _old_number, base_name = fields[index].split(" ", 1)
+                    fields[index] = f"{item_number} {base_name}"
+            elif fields[0] in {"Bias1", "Bias2", "Bias3"}:
+                fields = [
+                    re.sub(
+                        r"#(\d+)",
+                        lambda match: f"#{reference_map.get(int(match.group(1)), int(match.group(1)))}",
+                        value,
+                    )
+                    for value in fields
+                ]
+        compact.append("\t".join(fields))
+    return compact
 
 
 class DianjiFilenameTests(unittest.TestCase):
@@ -182,6 +217,18 @@ class DianjiFilenameTests(unittest.TestCase):
                 "TESTPRODUCT-7E00_m260604005-001 fa65-5405 ALL260705044541.xls",
                 "M260604005-001", "FA65-5405", "ALL260705044541",
             ),
+            (
+                "TESTPRODUCT-7E00_M260310017-001 C190388.00 DC M08260327032511.xls",
+                "M260310017-001", "C190388.00", "DC M08260327032511",
+            ),
+            (
+                "TESTPRODUCT-7E00_m260323017-001c192810.00260415041728.xls",
+                "M260323017-001", "C192810.00", "260415041728",
+            ),
+            (
+                "TESTPRODUCT-7E00_m260325005-006-A-A c192811.00260419014419.xls",
+                "M260325005-006-A-A", "C192811.00", "260419014419",
+            ),
         )
         for filename, manufacturing_lot, batch, test_tag in cases:
             with self.subTest(filename=filename):
@@ -195,6 +242,17 @@ class DianjiFilenameTests(unittest.TestCase):
             parse_dianji_filename(
                 "TESTPRODUCT-7E00_M260604005-001 FB65-5405 ALL260705044541.xls"
             )
+
+    def test_rejects_unverified_dj6_like_filename_variants(self):
+        cases = (
+            "TESTPRODUCT-7E00_M260310017-001-B-B C190388.00260327032511.xls",
+            "TESTPRODUCT-7E00_M260310017-001 C190388.00 DC M09260327032511.xls",
+        )
+        for filename in cases:
+            with self.subTest(filename=filename), self.assertRaisesRegex(
+                DianjiFormatError, "电基文件名不符合"
+            ):
+                parse_dianji_filename(filename)
 
 
 class PowerTechParserTests(unittest.TestCase):
@@ -246,6 +304,45 @@ class PowerTechParserTests(unittest.TestCase):
         self.assertEqual(parsed.data.loc[0, "ISGS10(nA)"], -1.3174)
         self.assertEqual(parsed.data.loc[0, "IGSS10(nA)"], 0.099)
         self.assertEqual(parsed.data.loc[0, "IDSS90(nA)"], 11.819)
+
+    def test_accepts_verified_compact_32_item_layout_with_stable_output(self):
+        with tempfile.TemporaryDirectory() as temp:
+            parsed = parse_powertech_file(
+                _make_source(Path(temp), compact_layout=True)
+            )
+
+        self.assertEqual(parsed.source_rows, 4)
+        self.assertEqual(parsed.kept_rows, 3)
+        self.assertEqual(
+            list(parsed.data.columns),
+            [
+                "批次", "DVDS(mV)", "Rg(R)", "VTH1(V)", "VTH2(V)",
+                "BVDSS1(V)", "BVDSS2(V)", "IDSS100(nA)", "IGSS25(nA)",
+                "ISGS25(nA)", "IGSS20(nA)", "ISGS20(nA)", "RDON10(mR)",
+                "VFSD(V)", "ISGS10(nA)", "IGSS10(nA)", "IDSS90(nA)",
+                "VTH3(V)", "DELTA BV", "DELTA VTH",
+            ],
+        )
+        self.assertEqual(parsed.data.loc[0, "ISGS10(nA)"], -1.3174)
+        self.assertEqual(parsed.data.loc[0, "IGSS10(nA)"], 0.099)
+        self.assertEqual(parsed.data.loc[0, "IDSS90(nA)"], 11.819)
+        self.assertEqual(parsed.data.loc[0, "DELTA BV"], 0.0152)
+        self.assertEqual(parsed.data.loc[0, "DELTA VTH"], 0.1481)
+
+    def test_accepts_verified_a_a_lot_suffix_in_filename_and_metadata(self):
+        with tempfile.TemporaryDirectory() as temp:
+            parsed = parse_powertech_file(
+                _make_source(
+                    Path(temp),
+                    manufacturing_lot="M000000001-006-A-A",
+                )
+            )
+
+        self.assertEqual(
+            parsed.identity.manufacturing_lot,
+            "M000000001-006-A-A",
+        )
+        self.assertIsNone(parsed.lot_identity_warning)
 
     def test_allows_stale_lot_piece_suffix_when_main_lot_and_batch_match(self):
         with tempfile.TemporaryDirectory() as temp:
