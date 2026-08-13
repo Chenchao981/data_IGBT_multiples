@@ -32,7 +32,10 @@ def _make_source(
     metadata_batch: str | None = None,
 ) -> Path:
     layout = next(value for value in POWERTECH_XLSX_LAYOUTS if value.name == layout_name)
-    default_variant = next(iter(layout.filename_variants))
+    # Frozenset iteration depends on Python's randomized hash seed.  Pick one
+    # verified variant deterministically so fixtures never become invalid by
+    # chance on another process or packaged runtime.
+    default_variant = sorted(layout.filename_variants)[0]
     if label is None:
         label = default_variant[0]
     if trailing_all is None:

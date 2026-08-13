@@ -14,10 +14,11 @@ Notes:
 - Jiequn DC-AI is the recommended default and detects one DC format per selected directory.
 - Mixed DC-1, DC-unified, and DC-3 directories are rejected instead of guessed.
 - For Jiequn DC-3, select the third-line DC1 root or a product directory.
-- Dianji FT-ALL uses a format registry to detect verified PowerTECH .xls text, PowerTECH .xlsx Datalog, and STS8203 .csv sources, then dispatches to the matching parser module.
+- Dianji FT-ALL uses a format registry to detect verified PowerTECH .xls text, PowerTECH .xlsx Datalog, STS8203 .csv, and DP1205 SW+Trr TF .csv sources, then dispatches to the matching parser module.
 - Dianji batch IDs accept the verified C203133.03 week-code and FA65-5405 formats, with strict filename/Lot identity checks.
 - Dianji PowerTECH also accepts the reviewed dj6 no-space lot/batch form, -A-A lot suffix, DC M08 test tag, and compact 32-Item program; unknown variants remain rejected.
 - Dianji PowerTECH XLSX strictly supports the reviewed NCE40ED120VT(LA) dj7 34/35/38/39-Item layouts and restores one 21-parameter RAW contract; unknown products, layouts, units, Bias conditions, or identities are rejected.
+- Dianji TF CSV strictly supports the reviewed NCE40ED120VT(LA) DP1205 SW+Trr 57-column/50-Item layout and writes NUM + batch + 47 unit-qualified parameters; '/' is treated as missing and Udc(V) is the retention gate.
 - Dianji FT-ALL stores each run in a numbered product-family folder such as NCEAP016N85LL(M)_001.
 - Dianji restores one stable RAW order across both standard Item 29-31 permutations and the reviewed compact 32-Item mapping.
 - Dianji STS8203 supports the reviewed NCEAP40T20AGU(M)-7E00 layout, including verified 8/9-digit manufacturing lots, suffix -a, source segment 2, and cross-day tests whose Date matches Ending Time; unreviewed variants are rejected.
@@ -32,5 +33,5 @@ Notes:
 - Dense repeated in-spec values are compacted for faster opening; every OOS point is retained.
 - Review the application log if processing fails.
 
-Version: 2.10.0
+Version: 2.11.0
 Author: cc

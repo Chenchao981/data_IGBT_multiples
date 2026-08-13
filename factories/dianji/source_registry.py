@@ -22,6 +22,10 @@ from factories.dianji.sts8203_parser import (
     is_sts8203_csv_file,
     parse_sts8203_file,
 )
+from factories.dianji.tf_csv_parser import (
+    is_dianji_tf_csv_file,
+    parse_dianji_tf_file,
+)
 
 
 Detector = Callable[[str | Path], bool]
@@ -63,6 +67,13 @@ SOURCE_FORMATS: tuple[DianjiSourceFormat, ...] = (
         extensions=frozenset({".csv"}),
         detector=is_sts8203_csv_file,
         parser=parse_sts8203_file,
+    ),
+    DianjiSourceFormat(
+        key="dianji_tf_csv",
+        display_name="Dianji TF CSV",
+        extensions=frozenset({".csv"}),
+        detector=is_dianji_tf_csv_file,
+        parser=parse_dianji_tf_file,
     ),
 )
 

@@ -14,7 +14,7 @@ python gui/main_window.py
 python packaging/release/ft_data_cleaner.pyz
 ```
 
-GUI 入口是 `gui.main_window:main`，版本为 2.10.0。
+GUI 入口是 `gui.main_window:main`，版本为 2.11.0。
 
 ## 界面结构
 
@@ -55,7 +55,7 @@ DC 入口以及 DVDS、RG 入口。
 
 ## 其他操作
 
-- 电基 FT-ALL：选择包含 PowerTECH 伪 `.xls`、原生 `.xlsx` 或 STS8203 `.csv` 文件的目录；
+- 电基 FT-ALL：选择包含 PowerTECH 伪 `.xls`、原生 `.xlsx`、STS8203 `.csv` 或 DP1205 TF `.csv` 文件的目录；
   程序通过格式注册表自动识别并调用对应解析模块，创建 `<产品主体>_NNN` 流水目录，并把产品级 `RAW`
   工作簿和散点数据包一起放入该目录。PowerTECH 已兼容 dj6 实际出现的紧凑 32 项程序、
   `-A-A` 制造批次后缀、制造批次/周记紧连及 `DC M08` 测试标签。

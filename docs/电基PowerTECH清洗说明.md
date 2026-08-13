@@ -2,11 +2,12 @@
 
 ## 1. 适用范围
 
-本流程自动识别并处理三种已验证的电基 FT-ALL 文件：
+本流程自动识别并处理四种已验证的电基 FT-ALL 文件：
 
 - PowerTECH：使用 `.xls` 扩展名，实际是 GB18030 编码、Tab 分隔的文本报告；
 - PowerTECH XLSX：使用原生 `.xlsx` 工作簿，数据位于唯一的 `Datalog` 工作表；
-- STS8203：使用 `.csv` 扩展名，文件前部是测试元数据，后部是 UTF-8 CSV 记录。
+- STS8203：使用 `.csv` 扩展名，文件前部是测试元数据，后部是 UTF-8 CSV 记录；
+- DP1205 TF：使用 GB18030 `.csv`，测试类型为 `SW+Trr`，严格输出 47 个带单位参数。
 
 GUI 入口：`电基 (Dianji) -> FT-ALL`
 
@@ -167,6 +168,7 @@ STS8203 还会严格校验文件名与 `Lot Id`、`Program`、`Beginning Time` �
 - `PowerTECH Test System` → `powertech_parser.py`；
 - 原生 XLSX `PowerTECH Test System` Datalog → `powertech_xlsx_parser.py`；
 - `STS8203 Station...` → `sts8203_parser.py`。
+- `设备名称,DP1205` → `tf_csv_parser.py`。
 
 三种解析器共享 `models.py` 中的身份和解析结果契约，但各自维护文件名、元数据、
 表头、单位和参数映射。以后新增格式时新增解析模块并注册，不在 GUI 或现有解析器中
@@ -214,6 +216,11 @@ PowerTECH `Min Limit`、`Max Limit`、`Bias1-3`、单位行生成散点数据包
 原生 XLSX 文件全部通过签名、身份、四种布局、单位和 Bias 校验；103,689 条源记录
 按有效 `DVCE(mV)` 保留 103,282 条，覆盖 7 个批次，统一输出 23 列
 （`NUM + 批次 + 21参数`），同时生成 103,282 条散点记录和 294 条来源规格。
+
+2026-08-13 真实验证：`dj7/NCE40ED120VT Old PR FT data/TF` 6 个 DP1205
+`SW+Trr` 文件共 23,594 条源记录，按有效 `Udc(V)` 保留 22,581 条，覆盖
+`FA5Y-9298/9413/9718` 三个批次；47 个参数逐项对账通过，并保留两套真实
+`Eoff2(mJ)` 限值（11.5–17.5、13–20）。
 
 ## 8. PAT 参数分析
 

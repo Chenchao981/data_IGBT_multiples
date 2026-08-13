@@ -373,6 +373,10 @@ class DianjiSourceRegistryTests(unittest.TestCase):
             handlers["sts8203_csv"].parser.__module__,
             "factories.dianji.sts8203_parser",
         )
+        self.assertEqual(
+            handlers["dianji_tf_csv"].parser.__module__,
+            "factories.dianji.tf_csv_parser",
+        )
 
     def test_detects_registered_format_by_extension_and_signature(self):
         with tempfile.TemporaryDirectory() as temp:

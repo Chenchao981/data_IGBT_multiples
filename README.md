@@ -14,7 +14,7 @@
 | **杰群 第三产线** | .csv 产品目录平铺、可变尾空列 | DC / FT散点图 | ✅ 可用 |
 | **杰群 DC-AI** | 自动识别上述三种目录/头部特征 | 自动分发清洗 / FT散点图 | ✅ 推荐入口 |
 | PAT 参数分析 | 已清洗 Excel | 日月新 / 杰群 / 电基统计汇总 | ✅ 可用 |
-| **电基 (Dianji)** | PowerTECH 伪 `.xls` / 原生 `.xlsx` / STS8203 `.csv` | FT-ALL 自动识别清洗 / FT散点图 | ✅ 可用 |
+| **电基 (Dianji)** | PowerTECH 伪 `.xls` / 原生 `.xlsx` / STS8203 `.csv` / DP1205 TF `.csv` | FT-ALL 自动识别清洗 / FT散点图 | ✅ 可用 |
 
 ---
 
@@ -52,6 +52,7 @@ data_IGBT_multiple/
 │       ├── powertech_parser.py     ← 伪 .xls 文本解析 + 严格校验
 │       ├── powertech_xlsx_parser.py ← 原生 .xlsx Datalog 解析 + 严格校验
 │       ├── sts8203_parser.py       ← STS8203 .csv 解析 + 严格校验
+│       ├── tf_csv_parser.py        ← DP1205 SW+Trr TF .csv 解析 + 严格校验
 │       ├── dc_cleaner.py           ← FT-ALL 合并清洗 → RAW
 │       ├── pat_cleaner.py          ← RAW 参数 PAT 统计
 │       └── yield_report.py         ← SYL&SBL 良率分析
@@ -383,6 +384,7 @@ python gui/main_window.py
 
 ## 🔄 版本历史
 
+- **v2.11.0** (2026-08-13)：新增电基 `dj7/TF` DP1205 `SW+Trr` GB18030 CSV。严格校验产品、文件名/批次/开始时间、57 列表头、50 项顺序及单位，输出 `NUM + 批次 + 47参数`；逐文件保留上下限，`/` 转为空值，以有效 `Udc(V)` 作为入口保留规则。
 - **v2.10.0** (2026-08-13)：新增电基 `dj7` PowerTECH 原生 `.xlsx` Datalog 格式。严格支持产品 `NCE40ED120VT(LA)` 的 34/35/38/39 项四种已验证布局，按参数身份跳过 `SAME/DELAY` 占位项并统一输出 `NUM + 批次 + 21参数`；14 个真实文件共 103,689 条源记录，按有效 `DVCE(mV)` 保留 103,282 条、7 个批次，`over` 与 `9999/-9999` 均转为空值。
 - **v2.9.2** (2026-08-05)：兼容电基 `dj6/DC` 的已验证 PowerTECH 变体：`DC M08` 测试标签、制造批次与周记无空格、制造批次 `-A-A` 后缀，以及删除两个 `SAME` 占位项但保留完整 19 参数的紧凑 32 项布局。92 个真实文件全部解析为统一 21 列 RAW 契约，465,562 条源记录保留 460,595 条。
 - **v2.9.1** (2026-08-03)：修复电基 `dj5/DC` STS8203 文件名兼容；严格支持已验证的 8/9 位制造批号、`-a` 片段后缀、批次后分段号 `2` 以及跨午夜 `Date=Ending Time` 元数据。新增 `models.py + source_registry.py` 注册式格式识别，PowerTECH/STS8203 各自独立解析；47 个真实文件完整清洗为 793,010 行、21 列、13 批次。
