@@ -65,7 +65,7 @@ class DianjiPanel(BasePanel):
             return True
         raise RuntimeError(
             f"电基 {label} 处理没有生成有效结果。"
-            "FT-ALL 请选择 PowerTECH .xls 或 STS8203 .csv 原始数据目录；"
+            "FT-ALL 请选择 PowerTECH .xls/.xlsx 或 STS8203 .csv 原始数据目录；"
             "PAT 请选择一个或多个含 RAW 工作表的电基清洗结果；"
             "SYL&SBL 请选择封装厂良率 Excel 文件。"
         )

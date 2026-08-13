@@ -2,9 +2,10 @@
 
 ## 1. 适用范围
 
-本流程自动识别并处理两种已验证的电基 FT-ALL 文件：
+本流程自动识别并处理三种已验证的电基 FT-ALL 文件：
 
 - PowerTECH：使用 `.xls` 扩展名，实际是 GB18030 编码、Tab 分隔的文本报告；
+- PowerTECH XLSX：使用原生 `.xlsx` 工作簿，数据位于唯一的 `Datalog` 工作表；
 - STS8203：使用 `.csv` 扩展名，文件前部是测试元数据，后部是 UTF-8 CSV 记录。
 
 GUI 入口：`电基 (Dianji) -> FT-ALL`
@@ -50,6 +51,18 @@ python -m factories.dianji.dc_cleaner <输入目录> <输出目录>
 - STS8203 文件未提供可用于动态命名的 Bias 元数据，因此只对已逐项确认的产品启用
   显式映射；未知产品或列位置、单位变化会停止清洗。
 
+### 2.3 PowerTECH 原生 XLSX（dj7）
+
+- 当前只支持已验证产品 `NCE40ED120VT(LA)`，第一格签名为
+  `PowerTECH Test System`，工作表必须唯一且名称为 `Datalog`。
+- 第 1～18 行是设备元数据、Item、Bias、规格及单位；第 19 行起是测试记录。
+- 已验证 34、35、38、39 项四种布局。35 项比 34 项多一个末尾 `DELAY`；
+  38/39 项在 VF 后分别含 3/4 个 `SAME` 分档占位项，业务测试身份保持一致。
+- 文件名、`DataFileName`、`Lot`、`TestFileName`、Station 和 Tester Serial 会交叉校验。
+  当前支持真实出现的空标签、`ALL/M05/DC/rt`、批次后单下划线和机台号后 `ALL`。
+  标签、机台号、尾部 `ALL` 与 34/35/38/39 项布局按真实组合登记，不做交叉放宽。
+- 测量值 `over` 及 `9999/-9999` 作为无效占位写为空值；未知非数值标记会停止。
+
 ## 3. 输出契约
 
 输出目录按产品主体和三位流水号创建，例如完整产品
@@ -70,6 +83,20 @@ IDSS<第二偏置>(nA), VTH3(V), DELTA BV, DELTA VTH
 PowerTECH 的偏置值从每个文件自己的 `Bias` 头部读取。例如不同产品可生成
 `IDSS40(nA)/IDSS35(nA)` 或 `IDSS100(nA)/IDSS90(nA)`，程序不硬编码产品电压。
 STS8203 当前已验证产品使用明确的 `IDSS40(nA)/IDSS35(nA)` 映射。
+
+PowerTECH XLSX 使用独立的 21 参数契约：
+
+```text
+DVCE(mV), Rg(R), VTH1(V), VTH2(V),
+BVDSS1(V), BVDSS2(V), BVDSS3(V), ICES1000(nA),
+IGSS30-1(nA), ISGS30-1(nA),
+VDSON40A-11V(V), VDSON40A-15V(V), VDSON160A-15V(V), VF40A(V),
+ICES1200-1(nA), ICES1250(nA), ICES1200-2(nA),
+IGSS30-2(nA), ISGS30-2(nA), DELTA BV, DELTA VTH
+```
+
+设备筛选或占位项 `CONT_TR/VF_EX/SAME/DVF_EX/TSD/CONT_LCR/CISS_EX/CONT/`
+首个占位 VTH/DELAY 不进入输出。四种布局均按注册表中的明确 Item 身份恢复上述顺序。
 
 ### PowerTECH Item 映射
 
@@ -126,6 +153,9 @@ STS8203 当前已验证产品使用明确的 `IDSS40(nA)/IDSS35(nA)` 映射。
 - 同一次运行只包含一个产品；
 - 多文件生成的输出列完全一致。
 
+PowerTECH XLSX 还会严格校验唯一 `Datalog` 工作表、产品白名单、四种完整 Item
+序列、目标 Item 单位和 Bias 条件，以及文件名与工作簿内 DataFile/Lot/程序/机台身份。
+
 STS8203 还会严格校验文件名与 `Lot Id`、`Program`、`Beginning Time` 一致，
 并校验 `Date` 与 `Ending Time` 的日期、63 列表头、目标字段位置和单位。
 
@@ -135,9 +165,10 @@ STS8203 还会严格校验文件名与 `Lot Id`、`Program`、`Beginning Time` �
 文件内容签名识别格式，再分发给独立模块：
 
 - `PowerTECH Test System` → `powertech_parser.py`；
+- 原生 XLSX `PowerTECH Test System` Datalog → `powertech_xlsx_parser.py`；
 - `STS8203 Station...` → `sts8203_parser.py`。
 
-两种解析器共享 `models.py` 中的身份和解析结果契约，但各自维护文件名、元数据、
+三种解析器共享 `models.py` 中的身份和解析结果契约，但各自维护文件名、元数据、
 表头、单位和参数映射。以后新增格式时新增解析模块并注册，不在 GUI 或现有解析器中
 堆叠跨格式条件；未知签名、混合格式和识别不唯一仍会停止。
 
@@ -145,7 +176,8 @@ STS8203 还会严格校验文件名与 `Lot Id`、`Program`、`Beginning Time` �
 
 ## 6. 当前限制
 
-- 当前严格支持已验证的两种 34 项和一种紧凑 32 项 PowerTECH FT-ALL 布局，以及
+- 当前严格支持伪 `.xls` 的两种 34 项和一种紧凑 32 项 PowerTECH 布局、原生
+  `.xlsx` 的 `NCE40ED120VT(LA)` 34/35/38/39 项布局，以及
   `NCEAP40T20AGU(M)-7E00` 的 STS8203 63 列布局。
 - 测试程序若调整 Item 编号或新增/删除目标参数，需要先用真实新样例更新配置和测试。
 - 输出遵循用户提供的 `RAW` 数据模板；模板中遗留的图表对象不属于清洗契约，不复制。
@@ -177,6 +209,11 @@ PowerTECH `Min Limit`、`Max Limit`、`Bias1-3`、单位行生成散点数据包
 89 个为标准 34 项、3 个为紧凑 32 项；465,562 条源记录按有效 DVDS 规则保留
 460,595 条，15 个批次统一输出 21 列。文件名覆盖 2 个 `DC M08`、1 个无空格、
 2 个 `-A-A` 样本；另有 2 个既有片号未刷新告警，均保持制造主批与周记严格一致。
+
+2026-08-13 真实验证：`dj7/NCE40ED120VT Old PR FT data/DC` 14 个 PowerTECH
+原生 XLSX 文件全部通过签名、身份、四种布局、单位和 Bias 校验；103,689 条源记录
+按有效 `DVCE(mV)` 保留 103,282 条，覆盖 7 个批次，统一输出 23 列
+（`NUM + 批次 + 21参数`），同时生成 103,282 条散点记录和 294 条来源规格。
 
 ## 8. PAT 参数分析
 

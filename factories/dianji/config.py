@@ -9,11 +9,26 @@ FACTORY_NAME = "电基"
 FACTORY_NAME_EN = "Dianji"
 DATA_TYPES = ["FT-ALL"]
 FILE_EXT = ".xls"
-FILE_EXTS = (".xls", ".csv")
+FILE_EXTS = (".xls", ".xlsx", ".csv")
 
 # PowerTECH writes a GB18030/tab-delimited text report but uses an .xls suffix.
 SOURCE_SIGNATURE = "PowerTECH Test System"
 SOURCE_ENCODINGS = ("utf-8-sig", "gb18030")
+
+# PowerTECH native XLSX reports reviewed from dj7.  This is a separate source
+# format from the tab-delimited pseudo-XLS reports above.  Only the evidenced
+# NCE40ED120VT(LA) product and the exact tester-side filename/worksheet layouts
+# are enabled; other products or workbook schemas must be reviewed first.
+POWERTECH_XLSX_SIGNATURE = "PowerTECH Test System"
+POWERTECH_XLSX_SUPPORTED_PRODUCTS = frozenset({"NCE40ED120VT(LA)"})
+POWERTECH_XLSX_MANUFACTURING_LOT_PATTERN = (
+    r"[mM]\d{9}-\d{3}(?:-[aA]-[bB])?"
+)
+POWERTECH_XLSX_BATCH_PATTERN = r"[fF][aA][A-Za-z0-9]{2}-\d{4}"
+POWERTECH_XLSX_LABELS = frozenset({"", "ALL", "M05", "DC", "RT", "_"})
+POWERTECH_XLSX_TRAILING_LOT_LABELS = frozenset(
+    {"", "QC", "Q", "M05", "DC", "RT", "_"}
+)
 
 # Verified PowerTECH identity variants.  The optional ``-A-A`` suffix and
 # ``DC M08`` test tag come from the reviewed dj6 corpus; keep them explicit so

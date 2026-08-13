@@ -366,6 +366,10 @@ class DianjiSourceRegistryTests(unittest.TestCase):
             "factories.dianji.powertech_parser",
         )
         self.assertEqual(
+            handlers["powertech_xlsx"].parser.__module__,
+            "factories.dianji.powertech_xlsx_parser",
+        )
+        self.assertEqual(
             handlers["sts8203_csv"].parser.__module__,
             "factories.dianji.sts8203_parser",
         )

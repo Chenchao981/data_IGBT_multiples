@@ -60,7 +60,7 @@ class DianjiDCCleaner(BaseCleaner):
         )
         if not files:
             raise FileNotFoundError(
-                f"未在 {self.input_dir} 找到电基 PowerTECH .xls 或 STS8203 .csv 文件"
+                f"未在 {self.input_dir} 找到电基 PowerTECH .xls/.xlsx 或 STS8203 .csv 文件"
             )
         unsupported = []
         for path in files:
@@ -70,7 +70,7 @@ class DianjiDCCleaner(BaseCleaner):
                 unsupported.append(f"{path.name} ({exc})")
         if unsupported:
             raise DianjiFormatError(
-                "输入目录混有不支持的电基 .xls/.csv 文件，请分开选择目录: "
+                "输入目录混有不支持的电基 .xls/.xlsx/.csv 文件，请分开选择目录: "
                 + ", ".join(unsupported[:5])
             )
         return files
@@ -177,6 +177,9 @@ class DianjiDCCleaner(BaseCleaner):
             "source_rows": source_rows,
             "kept_rows": len(merged),
             "dropped_before_dvds": source_rows - len(merged),
+            "retention_parameter": (
+                "DVCE(mV)" if source_formats == {"PowerTECH XLSX"} else "DVDS(mV)"
+            ),
             "batch_counts": batch_counts,
             "invalid_marker_counts": dict(invalid_counts),
             "identity_warnings": [
@@ -187,7 +190,7 @@ class DianjiDCCleaner(BaseCleaner):
             "columns": list(merged.columns),
         }
         logger.info(
-            "电基清洗完成: %s；源记录=%s，保留=%s，DVDS前失效=%s",
+            "电基清洗完成: %s；源记录=%s，保留=%s，入口参数前失效=%s",
             output_file,
             source_rows,
             len(merged),
@@ -212,11 +215,11 @@ def output_product_name(product: str) -> str:
 
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(
-        description="自动识别并清洗电基 PowerTECH/STS8203 FT-ALL 源数据"
+        description="自动识别并清洗电基 PowerTECH/PowerTECH XLSX/STS8203 FT-ALL 源数据"
     )
     parser.add_argument(
         "input_dir",
-        help="包含 PowerTECH 伪 .xls 或 STS8203 .csv 文件的目录",
+        help="包含 PowerTECH 伪 .xls、PowerTECH .xlsx 或 STS8203 .csv 文件的目录",
     )
     parser.add_argument("output_dir", help="输出目录")
     args = parser.parse_args(argv)

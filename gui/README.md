@@ -14,7 +14,7 @@ python gui/main_window.py
 python packaging/release/ft_data_cleaner.pyz
 ```
 
-GUI 入口是 `gui.main_window:main`，版本为 2.9.2。
+GUI 入口是 `gui.main_window:main`，版本为 2.10.0。
 
 ## 界面结构
 
@@ -55,10 +55,11 @@ DC 入口以及 DVDS、RG 入口。
 
 ## 其他操作
 
-- 电基 FT-ALL：选择包含 PowerTECH 伪 `.xls` 或 STS8203 `.csv` 文件的目录；
+- 电基 FT-ALL：选择包含 PowerTECH 伪 `.xls`、原生 `.xlsx` 或 STS8203 `.csv` 文件的目录；
   程序通过格式注册表自动识别并调用对应解析模块，创建 `<产品主体>_NNN` 流水目录，并把产品级 `RAW`
   工作簿和散点数据包一起放入该目录。PowerTECH 已兼容 dj6 实际出现的紧凑 32 项程序、
   `-A-A` 制造批次后缀、制造批次/周记紧连及 `DC M08` 测试标签。
+  原生 XLSX 当前严格支持 `NCE40ED120VT(LA)` 的 dj7 四种已验证布局。
 - PAT：选择一个或多个清洗结果 `.xls/.xlsx`；日月新/杰群读取 `DC_Data_1/2/3`
   等编号 Sheet，电基读取 `RAW/RAW_1/RAW_2`，算法和输出格式一致。
 - SYL&SBL：选择一个工厂良率 `.xls/.xlsx` 文件，输出到单独目录。

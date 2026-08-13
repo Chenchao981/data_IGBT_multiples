@@ -14,6 +14,10 @@ from factories.dianji.powertech_parser import (
     is_powertech_text_file,
     parse_powertech_file,
 )
+from factories.dianji.powertech_xlsx_parser import (
+    is_powertech_xlsx_file,
+    parse_powertech_xlsx_file,
+)
 from factories.dianji.sts8203_parser import (
     is_sts8203_csv_file,
     parse_sts8203_file,
@@ -45,6 +49,13 @@ SOURCE_FORMATS: tuple[DianjiSourceFormat, ...] = (
         extensions=frozenset({".xls"}),
         detector=is_powertech_text_file,
         parser=parse_powertech_file,
+    ),
+    DianjiSourceFormat(
+        key="powertech_xlsx",
+        display_name="PowerTECH XLSX",
+        extensions=frozenset({".xlsx"}),
+        detector=is_powertech_xlsx_file,
+        parser=parse_powertech_xlsx_file,
     ),
     DianjiSourceFormat(
         key="sts8203_csv",

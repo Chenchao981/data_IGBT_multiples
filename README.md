@@ -14,7 +14,7 @@
 | **杰群 第三产线** | .csv 产品目录平铺、可变尾空列 | DC / FT散点图 | ✅ 可用 |
 | **杰群 DC-AI** | 自动识别上述三种目录/头部特征 | 自动分发清洗 / FT散点图 | ✅ 推荐入口 |
 | PAT 参数分析 | 已清洗 Excel | 日月新 / 杰群 / 电基统计汇总 | ✅ 可用 |
-| **电基 (Dianji)** | PowerTECH 伪 `.xls` / STS8203 `.csv` | FT-ALL 自动识别清洗 / FT散点图 | ✅ 可用 |
+| **电基 (Dianji)** | PowerTECH 伪 `.xls` / 原生 `.xlsx` / STS8203 `.csv` | FT-ALL 自动识别清洗 / FT散点图 | ✅ 可用 |
 
 ---
 
@@ -50,6 +50,7 @@ data_IGBT_multiple/
 │       ├── models.py               ← 各格式共用身份与解析结果契约
 │       ├── source_registry.py      ← 内容签名识别 + 解析模块注册/分发
 │       ├── powertech_parser.py     ← 伪 .xls 文本解析 + 严格校验
+│       ├── powertech_xlsx_parser.py ← 原生 .xlsx Datalog 解析 + 严格校验
 │       ├── sts8203_parser.py       ← STS8203 .csv 解析 + 严格校验
 │       ├── dc_cleaner.py           ← FT-ALL 合并清洗 → RAW
 │       ├── pat_cleaner.py          ← RAW 参数 PAT 统计
@@ -318,6 +319,7 @@ df = parse_dta_csv(file_path, ["IDSS", "VTH"], unique_only=False)
 | `_build_param_name()` | `csv_parser.py` | 构建增强参数名（seq/bias/unit） |
 | `_apply_unit_conversions()` | `base_cleaner.py` | 按 config 的换算表乘以因子 |
 | `parse_powertech_file()` | `dianji/powertech_parser.py` | 解析电基 PowerTECH 伪 `.xls` 文本 |
+| `parse_powertech_xlsx_file()` | `dianji/powertech_xlsx_parser.py` | 解析电基 PowerTECH 原生 `.xlsx` Datalog |
 | `parse_sts8203_file()` | `dianji/sts8203_parser.py` | 解析电基 STS8203 `.csv` 文件 |
 | `detect_dianji_source_format()` | `dianji/source_registry.py` | 按扩展名和内容签名自动选择独立解析模块 |
 
@@ -381,6 +383,7 @@ python gui/main_window.py
 
 ## 🔄 版本历史
 
+- **v2.10.0** (2026-08-13)：新增电基 `dj7` PowerTECH 原生 `.xlsx` Datalog 格式。严格支持产品 `NCE40ED120VT(LA)` 的 34/35/38/39 项四种已验证布局，按参数身份跳过 `SAME/DELAY` 占位项并统一输出 `NUM + 批次 + 21参数`；14 个真实文件共 103,689 条源记录，按有效 `DVCE(mV)` 保留 103,282 条、7 个批次，`over` 与 `9999/-9999` 均转为空值。
 - **v2.9.2** (2026-08-05)：兼容电基 `dj6/DC` 的已验证 PowerTECH 变体：`DC M08` 测试标签、制造批次与周记无空格、制造批次 `-A-A` 后缀，以及删除两个 `SAME` 占位项但保留完整 19 参数的紧凑 32 项布局。92 个真实文件全部解析为统一 21 列 RAW 契约，465,562 条源记录保留 460,595 条。
 - **v2.9.1** (2026-08-03)：修复电基 `dj5/DC` STS8203 文件名兼容；严格支持已验证的 8/9 位制造批号、`-a` 片段后缀、批次后分段号 `2` 以及跨午夜 `Date=Ending Time` 元数据。新增 `models.py + source_registry.py` 注册式格式识别，PowerTECH/STS8203 各自独立解析；47 个真实文件完整清洗为 793,010 行、21 列、13 批次。
 - **v2.9.0** (2026-07-31)：电基 `FT-ALL` 新增 STS8203 CSV 自动识别；首个严格支持产品 `NCEAP40T20AGU(M)-7E00`，按终测 `QC_*` 参数组输出原有 21 列 RAW 契约，并继续使用产品主体流水目录。真实 `dj4` 文件从 34,608 条源记录保留 33,862 条有效 DVDS 记录。
