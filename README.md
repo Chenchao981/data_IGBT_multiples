@@ -15,6 +15,7 @@
 | **杰群 DC-AI** | 自动识别上述三种目录/头部特征 | 自动分发清洗 / FT散点图 | ✅ 推荐入口 |
 | PAT 参数分析 | 已清洗 Excel | 日月新 / 杰群 / 电基统计汇总 | ✅ 可用 |
 | **电基 (Dianji)** | PowerTECH 伪 `.xls` / 原生 `.xlsx` / STS8203 `.csv` / DP1205 TF `.csv` | FT-ALL 自动识别清洗 / FT散点图 | ✅ 可用 |
+| **集佳 (Jijia)** | STS8203 GB18030 `.csv` | FT-ALL 清洗（ASE 风格 `DC_Data`） | ✅ 可用 |
 
 ---
 
@@ -45,7 +46,7 @@ data_IGBT_multiple/
 │   │   ├── pat_cleaner.py          ← PAT 统计 (Sigma=IQR/1.35)
 │   │   └── unified_cleaner.py      ← [备选] 联合清洗
 │
-│   └── dianji/                     ← 电基模块
+│   ├── dianji/                     ← 电基模块
 │       ├── config.py               ← PowerTECH/STS8203 布局、单位和输出顺序
 │       ├── models.py               ← 各格式共用身份与解析结果契约
 │       ├── source_registry.py      ← 内容签名识别 + 解析模块注册/分发
@@ -56,6 +57,11 @@ data_IGBT_multiple/
 │       ├── dc_cleaner.py           ← FT-ALL 合并清洗 → RAW
 │       ├── pat_cleaner.py          ← RAW 参数 PAT 统计
 │       └── yield_report.py         ← SYL&SBL 良率分析
+│
+│   └── jijia/                      ← 集佳模块
+│       ├── config.py               ← NCE15TD120BT 严格字段/单位合同
+│       ├── parser.py               ← STS8203 CSV、文件名及元数据校验
+│       └── dc_cleaner.py           ← FT-ALL → ASE 风格 DC_Data
 │
 ├── shared/
 │   └── excel_utils.py              ← Excel/CSV 读写工具（.xls/.xlsx/.csv）
@@ -337,6 +343,9 @@ python factories/riyuexin/rg_cleaner.py
 # 电基 FT-ALL
 python -m factories.dianji.dc_cleaner <输入目录> <输出目录>
 
+# 集佳 FT-ALL
+python -m factories.jijia.dc_cleaner <输入目录> <输出目录>
+
 # 电基 PAT（可传一个或多个已清洗 RAW 工作簿）
 python -c "from factories.dianji.pat_cleaner import generate_pat; generate_pat(source_files=[r'<清洗结果.xlsx>'], output_dir=r'<输出目录>')"
 
@@ -384,6 +393,7 @@ python gui/main_window.py
 
 ## 🔄 版本历史
 
+- **v2.12.0** (2026-08-14)：新增集佳 `NCE15TD120BT` STS8203 GB18030 CSV 清洗。严格校验文件名、产品、测试批次元数据、123 列字段顺序及单位；按日月新格式输出 `NUM + lot_ID + 117参数` 到 `DC_Data`，不保留 `PASSFG/SOFT_BIN`，PASS/FAIL 记录全部保留，失败后未执行参数为空值。
 - **v2.11.0** (2026-08-13)：新增电基 `dj7/TF` DP1205 `SW+Trr` GB18030 CSV。严格校验产品、文件名/批次/开始时间、57 列表头、50 项顺序及单位，输出 `NUM + 批次 + 47参数`；逐文件保留上下限，`/` 转为空值，以有效 `Udc(V)` 作为入口保留规则。
 - **v2.10.0** (2026-08-13)：新增电基 `dj7` PowerTECH 原生 `.xlsx` Datalog 格式。严格支持产品 `NCE40ED120VT(LA)` 的 34/35/38/39 项四种已验证布局，按参数身份跳过 `SAME/DELAY` 占位项并统一输出 `NUM + 批次 + 21参数`；14 个真实文件共 103,689 条源记录，按有效 `DVCE(mV)` 保留 103,282 条、7 个批次，`over` 与 `9999/-9999` 均转为空值。
 - **v2.9.2** (2026-08-05)：兼容电基 `dj6/DC` 的已验证 PowerTECH 变体：`DC M08` 测试标签、制造批次与周记无空格、制造批次 `-A-A` 后缀，以及删除两个 `SAME` 占位项但保留完整 19 参数的紧凑 32 项布局。92 个真实文件全部解析为统一 21 列 RAW 契约，465,562 条源记录保留 460,595 条。

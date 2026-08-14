@@ -9,12 +9,14 @@ Features:
 - ASE: DC, FT scatter charts, DVDS, RG, PAT, and SYL&SBL
 - Jiequn: DC-AI, DC-1, DC-unified, DC-3, FT scatter charts, DVDS, RG, PAT, and SYL&SBL
 - Dianji: FT-ALL cleaning, FT scatter charts, PAT, and SYL&SBL
+- Jijia: NCE15TD120BT STS8203 FT-ALL cleaning to ASE-style DC_Data
 
 Notes:
 - Jiequn DC-AI is the recommended default and detects one DC format per selected directory.
 - Mixed DC-1, DC-unified, and DC-3 directories are rejected instead of guessed.
 - For Jiequn DC-3, select the third-line DC1 root or a product directory.
 - Dianji FT-ALL uses a format registry to detect verified PowerTECH .xls text, PowerTECH .xlsx Datalog, STS8203 .csv, and DP1205 SW+Trr TF .csv sources, then dispatches to the matching parser module.
+- Jijia FT-ALL strictly supports the reviewed NCE15TD120BT GB18030 STS8203 123-column layout. It writes NUM + lot_ID + 117 unit-qualified parameters to DC_Data, excludes PASSFG/SOFT_BIN, and retains both PASS and FAIL records.
 - Dianji batch IDs accept the verified C203133.03 week-code and FA65-5405 formats, with strict filename/Lot identity checks.
 - Dianji PowerTECH also accepts the reviewed dj6 no-space lot/batch form, -A-A lot suffix, DC M08 test tag, and compact 32-Item program; unknown variants remain rejected.
 - Dianji PowerTECH XLSX strictly supports the reviewed NCE40ED120VT(LA) dj7 34/35/38/39-Item layouts and restores one 21-parameter RAW contract; unknown products, layouts, units, Bias conditions, or identities are rejected.
@@ -33,5 +35,5 @@ Notes:
 - Dense repeated in-spec values are compacted for faster opening; every OOS point is retained.
 - Review the application log if processing fails.
 
-Version: 2.11.0
+Version: 2.12.0
 Author: cc

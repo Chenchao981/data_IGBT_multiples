@@ -14,11 +14,11 @@ python gui/main_window.py
 python packaging/release/ft_data_cleaner.pyz
 ```
 
-GUI 入口是 `gui.main_window:main`，版本为 2.11.0。
+GUI 入口是 `gui.main_window:main`，版本为 2.12.0。
 
 ## 界面结构
 
-- 左侧：日月新、杰群、电基三个封装厂。
+- 左侧：日月新、杰群、电基、集佳四个封装厂。
 - 右侧：当前封装厂的 FT 数据清洗、PAT 参数分析、封装良率分析。
 - 输入/输出默认指向用户桌面，可手工输入或浏览选择。
 - 长任务通过 `CleanerWorker(QThread)` 执行，日志实时显示，运行期间按钮禁用。
@@ -55,6 +55,9 @@ DC 入口以及 DVDS、RG 入口。
 
 ## 其他操作
 
+- 集佳 FT-ALL：选择包含 `NCE15TD120BT_<C批次>_<测试批次>_DC_<时间>.csv` 的目录；
+  程序按 GB18030 读取 STS8203 数据，严格校验 123 列字段和单位，输出日月新风格
+  `NUM + lot_ID + 117参数` 的 `DC_Data` 工作表，不输出 `PASSFG/SOFT_BIN`，也不删除 FAIL 行。
 - 电基 FT-ALL：选择包含 PowerTECH 伪 `.xls`、原生 `.xlsx`、STS8203 `.csv` 或 DP1205 TF `.csv` 文件的目录；
   程序通过格式注册表自动识别并调用对应解析模块，创建 `<产品主体>_NNN` 流水目录，并把产品级 `RAW`
   工作簿和散点数据包一起放入该目录。PowerTECH 已兼容 dj6 实际出现的紧凑 32 项程序、
