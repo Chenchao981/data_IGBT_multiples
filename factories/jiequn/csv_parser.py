@@ -475,7 +475,8 @@ def parse_dta_csv(file_path: str, target_params: List[str],
                   preserve_source_order: bool = False,
                   skip_match_counts: Optional[Dict[str, int]] = None,
                   prefer_source_units: bool = False,
-                  spec_unit_factors: Optional[Dict[str, float]] = None) -> Optional[pd.DataFrame]:
+                  spec_unit_factors: Optional[Dict[str, float]] = None,
+                  log_result: bool = True) -> Optional[pd.DataFrame]:
     """
     解析杰群 DTA CSV，提取目标参数并用增强名称（含测试条件+单位）。
 
@@ -613,5 +614,6 @@ def parse_dta_csv(file_path: str, target_params: List[str],
         spec_unit_factors,
     )
 
-    print(f"  [OK] {fname}: {len(df):,} 行, 参数: {val_cols}")
+    if log_result:
+        print(f"  [OK] {fname}: {len(df):,} 行, 参数: {val_cols}")
     return df

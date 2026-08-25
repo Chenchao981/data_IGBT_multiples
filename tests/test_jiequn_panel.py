@@ -76,6 +76,29 @@ class JiequnPanelTests(unittest.TestCase):
             self.panel._on_type_selected("DVDS")
             self.assertTrue(self.panel.scatter_btn.isHidden())
 
+    def test_pat_uses_raw_directory_and_direct_pat_entrypoint(self):
+        self.panel._on_type_selected("PAT")
+        self.panel.input_edit.setText(r"F:\data\jiequn_raw")
+        self.panel.output_edit.setText(r"F:\data\jiequn_pat")
+
+        self.assertEqual(self.panel._input_mode_for("PAT"), "directory")
+        self.assertEqual(self.panel.input_label.text(), "PAT 原始文件目录:")
+        self.assertEqual(self.panel.input_browse_btn.text(), "预览文件目录...")
+        self.assertEqual(self.panel.start_btn.text(), "计算 PAT")
+
+        with patch(
+            "factories.jiequn.pat_cleaner.generate_raw_pat",
+            return_value=Path(r"F:\data\jiequn_pat\PAT_001\PAT_001.xlsx"),
+        ) as generate_raw_pat:
+            result = self.panel._get_cleaner_fn("PAT")()
+
+        self.assertIsInstance(result, OperationResult)
+        self.assertEqual(result.output_file.name, "PAT_001.xlsx")
+        generate_raw_pat.assert_called_once_with(
+            source_dir=r"F:\data\jiequn_raw",
+            output_dir=r"F:\data\jiequn_pat",
+        )
+
 
 if __name__ == "__main__":
     unittest.main()

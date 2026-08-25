@@ -82,11 +82,14 @@ class JiequnPanel(BasePanel):
             return _run_unified
 
         elif data_type == "PAT":
-            from factories.jiequn.pat_cleaner import generate_pat
-            source_files = self.selected_input_files()
-            return lambda: self._require_success(
-                "PAT", bool(generate_pat(source_files=source_files, output_dir=out))
-            )
+            from factories.jiequn.pat_cleaner import generate_raw_pat
+
+            def _run_raw_pat():
+                output_file = generate_raw_pat(source_dir=inp, output_dir=out)
+                self._require_success("PAT", bool(output_file))
+                return OperationResult(success=True, output_file=Path(output_file))
+
+            return _run_raw_pat
 
         elif data_type == "SYL&SBL":
             from factories.jiequn.yield_report import generate_report
@@ -98,7 +101,13 @@ class JiequnPanel(BasePanel):
 
     def _apply_operation_ui(self, data_type: str):
         super()._apply_operation_ui(data_type)
-        if data_type == "DC-AI" and hasattr(self, "input_edit"):
+        if data_type == "PAT" and hasattr(self, "input_edit"):
+            self.input_label.setText("PAT 原始文件目录:")
+            self.input_edit.setPlaceholderText(
+                "选择包含杰群 DTA CSV 的产品目录或分类型数据根目录..."
+            )
+            self.input_browse_btn.setText("预览文件目录...")
+        elif data_type == "DC-AI" and hasattr(self, "input_edit"):
             self.input_label.setText("杰群 DC 数据文件夹:")
             self.input_edit.setPlaceholderText(
                 "选择单一格式的 DC-1、DC-统一CSV 或 DC-3 数据目录..."
@@ -107,7 +116,19 @@ class JiequnPanel(BasePanel):
     def _action_text_for(self, data_type: str) -> str:
         if data_type == "DC-AI":
             return "自动识别并清洗"
+        if data_type == "PAT":
+            return "计算 PAT"
         return super()._action_text_for(data_type)
+
+    def _input_mode_for(self, data_type: str) -> str:
+        if data_type == "PAT":
+            return "directory"
+        return super()._input_mode_for(data_type)
+
+    def _missing_input_message(self) -> str:
+        if self._selected_type == "PAT":
+            return "请选择包含杰群原始 DTA CSV 的文件目录"
+        return super()._missing_input_message()
 
     def _require_success(self, label: str, result: bool) -> bool:
         if result:
@@ -116,5 +137,6 @@ class JiequnPanel(BasePanel):
             f"杰群 {label} 处理没有生成有效结果。请确认输入目录是否选对："
             "DC-AI 一次只能选择一种杰群 DC 格式；DC-1/DVDS/RG 使用分类型目录；"
             "DC-统一CSV 选择 RAW 目录；DC-3 可选择第三产线根目录或产品目录；"
-            "PAT 选择一个或多个清洗结果 Excel 文件；SYL&SBL 使用单个良率 Excel 文件。"
+            "PAT 选择包含原始 DTA CSV 的产品目录或分类型数据根目录；"
+            "SYL&SBL 使用单个良率 Excel 文件。"
         )

@@ -13,7 +13,7 @@
 | **杰群 批次2** | .csv 统一CSV | DC+DVDS+RG 合并 / DC散点图 | ✅ 稳定 |
 | **杰群 第三产线** | .csv 产品目录平铺、可变尾空列 | DC / FT散点图 | ✅ 可用 |
 | **杰群 DC-AI** | 自动识别上述三种目录/头部特征 | 自动分发清洗 / FT散点图 | ✅ 推荐入口 |
-| PAT 参数分析 | 已清洗 Excel | 日月新 / 杰群 / 电基统计汇总 | ✅ 可用 |
+| PAT 参数分析 | 杰群原始 DTA CSV；其他厂按既有清洗结果契约 | 低内存逐文件统计汇总 | ✅ 可用 |
 | **电基 (Dianji)** | PowerTECH 伪 `.xls` / 原生 `.xlsx` / STS8203 `.csv` / DP1205 TF `.csv` | FT-ALL 自动识别清洗 / FT散点图 | ✅ 可用 |
 | **集佳 (Jijia)** | STS8203 GB18030 `.csv` | FT-ALL 清洗（ASE 风格 `DC_Data`） | ✅ 可用 |
 
@@ -76,7 +76,7 @@ data_IGBT_multiple/
 │   └── panels/
 │       ├── base_panel.py           ← 面板基类（文件夹选 / 按钮 / 日志）
 │       ├── riyuexin_panel.py       ← 日月新: 3 按钮
-│       ├── jiequn_panel.py         ← 杰群: DC-AI + 手工入口 + 清洗后统计
+│       ├── jiequn_panel.py         ← 杰群: DC-AI + 手工入口 + 原始目录 PAT
 │       └── dianji_panel.py         ← 电基: FT-ALL + PAT + SYL&SBL
 │
 ├── data/                           ← 原始数据
@@ -131,11 +131,15 @@ python gui/main_window.py
 若同一目录混有两种 DC 格式，或统一CSV只出现 DVDS 而缺少 `LCR-RG`，程序会停止并
 提示重新选择目录，不会猜测后继续清洗。详细规则见 `docs/杰群DC-AI自动识别说明.md`。
 
-第二行是清洗后统计/分析方法：
+第二行是独立的 PAT 参数分析方法，不需要先生成清洗明细 Excel：
 
 | 按钮 | 处理对象 | 输入目录示例 | 输出 |
 |------|---------|-------------|------|
-| **PAT** | 已清洗的 DC/DVDS/RG 输出 | 指向 `output/杰群-output` | PAT.xlsx（统计汇总） |
+| **PAT** | 原始 DTA CSV | 指向产品目录或分类型数据根目录 | `PAT_NNN/PAT_NNN.xlsx` |
+
+杰群 PAT 按“逐文件提取参数 → 临时分批保存参数数值 → 直接计算整体四分位数”执行。
+统一 CSV 只读取一轮；分目录格式会分别读取 DC、DVDS、RG。不同产品或不同参数结构
+混入同一目录时会停止，不会合并生成控制限。临时参数文件在运行结束后自动清理。
 
 ---
 
@@ -287,9 +291,9 @@ LCL = 中位数 - 6 * Sigma
 UCL = 中位数 + 6 * Sigma
 ```
 
-输出：`PAT.xlsx`，含每个参数的 count/mean/std/min/Q1/median/Q3/max/Sigma/LCL/UCL。
-日月新与杰群读取 `DC_Data/DVDS_Data/RG_Data`，电基读取 `RAW/RAW_n`；三者
-共用同一个统计函数，先合并同名参数的全部原始值，再计算整体四分位数。
+输出：`PAT_NNN/PAT_NNN.xlsx`，含每个参数的 count/mean/std/min/Q1/median/Q3/max/Sigma/LCL/UCL。
+杰群直接读取原始 DTA CSV，并沿用清洗器的参数命名和单位换算；日月新继续读取
+`DC_Data/DVDS_Data/RG_Data`，电基继续读取 `RAW/RAW_n`。三者共用同一个统计公式。
 
 ---
 
@@ -363,8 +367,8 @@ python -c "from factories.jiequn.dc_cleaner import JiequnDCCleaner; JiequnDCClea
 # 杰群 DC-AI（自动判断 DC-1 / DC-统一CSV / DC-3）
 python factories/jiequn/dc_auto.py <输入目录> <输出目录>
 
-# PAT 统计
-python -c "from factories.jiequn.pat_cleaner import build_pat, save_pat; save_pat(build_pat('output/杰群-output'))"
+# 杰群 PAT（直接读取原始 DTA CSV 目录）
+python -c "from factories.jiequn.pat_cleaner import generate_raw_pat; generate_raw_pat(r'<原始目录>', r'<输出目录>')"
 
 # GUI
 python gui/main_window.py
@@ -376,7 +380,7 @@ python gui/main_window.py
 
 - **操作系统**：Windows 10/11
 - **Python版本**：3.7+
-- **内存**：建议 8GB 以上（杰群 CSV 单文件可达 70MB）
+- **内存**：建议 8GB 以上；杰群 PAT 使用低内存参数流，不会一次性合并全部明细行
 
 ## 📦 依赖包
 
@@ -393,6 +397,7 @@ python gui/main_window.py
 
 ## 🔄 版本历史
 
+- **v2.13.0** (2026-08-25)：杰群 PAT 改为从 GUI 预览的原始 DTA CSV 目录直接计算；逐文件解析、分参数临时落盘并精确计算整体四分位数，避免先生成和再读取巨型清洗 Excel。拒绝混合产品和参数结构漂移，真实 520 文件、6,813,800 条含目标参数记录、23 参数与基准全量结果一致。
 - **v2.12.0** (2026-08-14)：新增集佳 `NCE15TD120BT` STS8203 GB18030 CSV 清洗。严格校验文件名、产品、测试批次元数据、123 列字段顺序及单位；按日月新格式输出 `NUM + lot_ID + 117参数` 到 `DC_Data`，不保留 `PASSFG/SOFT_BIN`，PASS/FAIL 记录全部保留，失败后未执行参数为空值。
 - **v2.11.0** (2026-08-13)：新增电基 `dj7/TF` DP1205 `SW+Trr` GB18030 CSV。严格校验产品、文件名/批次/开始时间、57 列表头、50 项顺序及单位，输出 `NUM + 批次 + 47参数`；逐文件保留上下限，`/` 转为空值，以有效 `Udc(V)` 作为入口保留规则。
 - **v2.10.0** (2026-08-13)：新增电基 `dj7` PowerTECH 原生 `.xlsx` Datalog 格式。严格支持产品 `NCE40ED120VT(LA)` 的 34/35/38/39 项四种已验证布局，按参数身份跳过 `SAME/DELAY` 占位项并统一输出 `NUM + 批次 + 21参数`；14 个真实文件共 103,689 条源记录，按有效 `DVCE(mV)` 保留 103,282 条、7 个批次，`over` 与 `9999/-9999` 均转为空值。
@@ -515,15 +520,16 @@ output/杰群2/mixed_<label>_JQ2_<timestamp>.xlsx  (每种类型一个)
 ### PAT 统计
 
 ```
-output/杰群-output/mixed_DC_JQ_*.xlsx  (最新按 mtime)
-output/杰群-output/mixed_DVDS_JQ_*.xlsx (最新按 mtime)
-output/杰群-output/mixed_RG_JQ_*.xlsx  (最新按 mtime)
+杰群原始 DTA CSV 产品目录
                 │
                 ▼
-pd.read_excel (calamine → openpyxl fallback)
+识别 DC-1 / DC-统一CSV / DC-3，校验单一产品和参数结构
                 │
                 ▼
-For each param column (skip NUM/lot_ID/周记):
+逐文件 parse_dta_csv；有效参数值追加到临时 float64 参数流
+                │
+                ▼
+每次只加载一个参数的全部有效值：
     compute count, mean, std, Q1, Q2, Q3, Sigma = (Q3-Q1)/1.35,
                    LCL = Q2 - 6*Sigma, UCL = Q2 + 6*Sigma
                 │
@@ -531,7 +537,7 @@ For each param column (skip NUM/lot_ID/周记):
 写 PAT sheet (prepend 变量 header row)
                 │
                 ▼
-output/杰群-output/PAT.xlsx
+<输出目录>/PAT_NNN/PAT_NNN.xlsx
 ```
 
 ### ASE（日月新）
@@ -701,11 +707,12 @@ _PARAM_UNITS = {
 
 ### `factories/jiequn/pat_cleaner.py`
 
-- 读取 `output/杰群-output/mixed_*_JQ_*.xlsx` 中**最新按 mtime** 的 DC/DVDS/RG 文件。
-- ⚠️ **只识别 `_JQ` 前缀，不识别 `_JQ2`**（批次2 输出的 PAT 需另行支持）。
-- 跳过 `NUM` / `lot_ID` / `周记` / `批次` 列。
-- 对每个参数列调用 `compute_pat_stats()` 计算统计量。
-- 输出 `output/杰群-output/PAT.xlsx`，sheet name `PAT`。
+- GUI 正式入口 `generate_raw_pat(source_dir, output_dir)` 直接读取杰群原始 DTA CSV。
+- 自动识别 DC-1、DC-统一CSV、DC-3；拒绝混合产品和参数结构漂移。
+- 逐文件解析并把各参数数值追加到临时二进制流，避免把全部明细同时保留在内存。
+- 统一 CSV 单轮提取 DC/DVDS/RG；分目录格式按各自目录提取，参数不会重复计数。
+- 临时参数流在成功或失败后都会清理；输出使用 `PAT_001/PAT_001.xlsx` 流水目录。
+- `build_pat()` 仍保留已清洗 Excel 兼容入口，供日月新和电基适配器复用。
 
 `compute_pat_stats(series)` 返回：
 - `count`, `mean`, `std (ddof=1)`, `min`, `Q1`, `median (Q2)`, `Q3`, `max`
@@ -770,7 +777,7 @@ Sigma, LCL\n计算值, UCL\n计算值, LCL\n更新前, UCL\n更新前, LCL\n更�
 - `CleanerWorker(QThread)`：后台线程运行 cleaner，信号 `progress(str)`、`finished(label, success)`、`error(str)`。
 - `BasePanel(QWidget)`：构建处理类型按钮组 + 文件夹选择组 + 操作按钮 + 状态文本区。
   - 按钮通过 `QButtonGroup(exclusive=True)` 保持单选。
-  - 第一行用于原始数据文件格式/清洗入口；可选第二行用于 PAT 等清洗后统计分析。
+  - 第一行用于原始数据文件格式/清洗入口；第二行用于 PAT 参数分析。
   - 抽象方法：`_get_cleaner_fn(data_type) -> Callable`，**子类必须实现**。
   - `_log(msg)`：时间戳 + 追加到状态区，自动滚动。
   - 样式：蓝色背景、加粗按钮、灰色边框。
@@ -782,7 +789,7 @@ Sigma, LCL\n计算值, UCL\n计算值, LCL\n更新前, UCL\n更新前, LCL\n更�
 - 输入/输出默认路径与日月新一致，启动后都指向用户桌面。
 - `DC-AI` 为默认选择，调用 `dc_auto.run_auto_dc(inp, out)`；三个手工 DC 入口继续保留。
 - `DC-统一CSV` 调 `clean_unified.run(inp, out)`。
-- "PAT" 可显式多选一个或多个清洗 Excel；同一文件内的 `DC_Data_1/2/3` 等编号 Sheet 会逐个读取并按参数合并。
+- “PAT” 使用目录选择器预览杰群原始 DTA CSV 目录，调用 `generate_raw_pat()` 直接计算。
 - 用户切换 DC-AI、各手工清洗入口或 PAT 时会分别记忆路径，不会覆盖已选择的桌面或业务目录。
 
 ---
@@ -887,13 +894,13 @@ Sigma, LCL\n计算值, UCL\n计算值, LCL\n更新前, UCL\n更新前, LCL\n更�
 ## ⚠️ Quirks & Gotchas（迭代前必读）
 
 1. **两个并行的统一CSV实现**：`clean_unified.py`（GUI/CLI 实际使用）和 `unified_cleaner.py`（带 logger 的备选）。`_apply_conv` 逻辑被重复实现。
-2. **PAT `build_pat` 只认 `mixed_*_JQ_*.xlsx`**，跳过 `mixed_*_JQ2_*.xlsx`（批次2）。批次2 输出的 PAT 分析需改前缀或加新函数。
+2. **杰群 PAT 目录必须是单一产品、单一参数结构**：混入产品或程序结构会停止；不要选择跨产品总目录。
 3. **ASE DVDS panel 的 monkey-patch**：`DVDSCleaner` 内部用 `base_dir` 派生 `dvds_dir` / `output_dir`，panel 在构造后修改这两个属性。
 4. **杰群输出列名约定**：内部解析仍会先生成 `周记`，最终输出通过 `formatting.normalize_output_columns()` 改为 `批次`。PAT 已跳过 `批次`，如果新增统计入口也要同步跳过。
 5. **同函数不同入参**：`generate_lot_based_filename` 在 Jiequn 调 `zhouji_list`，ASE 调 `lot_ids`——参数名不同，**只关心值**。
 6. **两处 log 文件位置**：`dc_cleaner.log` 等既在项目根也在 `gui/` 下。ASE cleaner 用 `logging.FileHandler('dc_cleaner.log', mode='w')`（相对 CWD），从 `gui/` 跑就在 `gui/`，从根跑就在根。
 7. **xlsxwriter 硬依赖**：`requirements.txt` 锁定 `xlsxwriter>=3.0.0`，但 fallback 到 openpyxl 仍可工作。
-8. **PAT 用 glob + mtime 取最新**：仅分析**最新**的 `mixed_*_JQ_*.xlsx`，同时存在两个批次时只分析新的。
+8. **PAT 临时磁盘空间**：原始大数据运行时会在输出根目录创建 `jiequn_pat_*` 临时参数流，完成或失败后自动清理；磁盘需要容纳有效参数数值。
 9. **ASE RG 健全性过滤**：`0 < RG < 1000` 硬编码，对某些器件家族可能误删。
 10. **`process_all_dc_files` 返回类型不对称**：返回 `bool` 但 `None` 也视为失败；`RGCleaner.run()` 可返回 `None` 或 path。
 11. **DC-AI 不接受多格式总目录**：若选择目录同时含 DC-1、统一CSV或 DC-3，程序会拒绝；应选择单一格式的下级目录。
