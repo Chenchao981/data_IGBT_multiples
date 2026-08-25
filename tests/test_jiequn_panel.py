@@ -26,11 +26,11 @@ class JiequnPanelTests(unittest.TestCase):
     def tearDown(self):
         self.panel.close()
 
-    def test_dc_ai_is_default_and_manual_dc_formats_remain_available(self):
+    def test_dc_ai_is_the_only_cleaning_entry(self):
         self.assertEqual(self.panel._selected_type, "DC-AI")
         self.assertEqual(
             self.panel.data_types,
-            ["DC-AI", "DC-1", "DC-统一CSV", "DC-3", "DVDS", "RG"],
+            ["DC-AI"],
         )
         self.assertEqual(self.panel.start_btn.text(), "自动识别并清洗")
 

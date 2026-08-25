@@ -14,7 +14,7 @@ python gui/main_window.py
 python packaging/release/ft_data_cleaner.pyz
 ```
 
-GUI 入口是 `gui.main_window:main`，版本为 2.12.0。
+GUI 入口是 `gui.main_window:main`，版本为 2.14.0。
 
 ## 界面结构
 
@@ -25,7 +25,7 @@ GUI 入口是 `gui.main_window:main`，版本为 2.12.0。
 
 ## FT 参数散点图
 
-- 支持日月新 `DC`、杰群 `DC-AI/DC-1/DC-统一CSV/DC-3`、电基 `FT-ALL`。
+- 支持日月新 `DC`、杰群 `DC-AI`、电基 `FT-ALL`。
 - 先完成对应清洗；成功生成散点数据包后才启用“FT 散点图”按钮。
 - 操作按钮按业务顺序排列：左侧“开始清洗”，右侧“FT 散点图”。
 - 清洗器利用内存中的清洗数据生成散点图数据包，不重复读取原始文件。
@@ -39,19 +39,20 @@ GUI 入口是 `gui.main_window:main`，版本为 2.12.0。
 
 ## 杰群 DC-AI
 
-杰群面板默认选择 `DC-AI`，另保留 `DC-1`、`DC-统一CSV`、`DC-3` 三个手工
-DC 入口以及 DVDS、RG 入口。
+杰群面板只保留 `DC-AI` 一个清洗入口。格式识别和分目录的 DVDS/RG 配对均由后端完成。
 
 `DC-AI` 只读取目录结构和 DTA CSV 的 Item 头部：
 
 | 类型 | 识别特征 | 清洗器 |
 | --- | --- | --- |
-| DC-1 | 存在名称严格等于 `DC` 的分类型目录 | `JiequnDCCleaner` |
+| DC-1 | 存在名称严格等于 `DC` 的分类型目录 | 依次调用既有 DC、可配对 DVDS、可配对 RG 清洗器 |
 | DC-统一CSV | Item 同时有 DC、DVDS、LCR-RG | `clean_unified.run` |
 | DC-3 | 无 DC 子目录，Item 有 DC 且无 DVDS | `JiequnDCCleaner` |
 
-选择的目录必须只有一种格式。混合目录、缺 Item、无 DC 参数或不完整统一CSV会在
-清洗前报错。识别和分发逻辑位于 `factories/jiequn/dc_auto.py`，GUI 不包含业务规则。
+选择的目录必须只有一种格式。分目录格式建议选择同时包含 `DC/DVDS/RG` 的产品根目录，
+也可直接选择 `DC` 目录；程序只处理实际发现的附加目录。多个可配对目录、混合格式、
+缺 Item、无 DC 参数或不完整统一CSV会在清洗前报错。识别和分发逻辑位于
+`factories/jiequn/dc_auto.py`，GUI 不包含业务规则。
 
 ## 其他操作
 
@@ -68,7 +69,7 @@ DC 入口以及 DVDS、RG 入口。
 - 日月新/电基 PAT：仍选择各自已验证的清洗结果 Excel；日月新读取
   `DC_Data_1/2/3`，电基读取 `RAW/RAW_1/RAW_2`。
 - SYL&SBL：选择一个工厂良率 `.xls/.xlsx` 文件，输出到单独目录。
-- DC/DVDS/RG/DC-AI：输入为目录，输出为目录。
+- 杰群 DC-AI：输入为目录，输出为目录；自动处理实际存在的 DC/DVDS/RG。
 
 ## 开发验证
 

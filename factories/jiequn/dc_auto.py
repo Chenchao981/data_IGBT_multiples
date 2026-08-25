@@ -16,6 +16,8 @@ from factories.jiequn.clean_unified import run_with_result as run_unified
 from factories.jiequn.config import JIEQUN_DC_PARAMS
 from factories.jiequn.csv_parser import _item_matches_param, read_header_info
 from factories.jiequn.dc_cleaner import JiequnDCCleaner
+from factories.jiequn.dvds_cleaner import JiequnDVDSCleaner
+from factories.jiequn.rg_cleaner import JiequnRGCleaner
 
 
 DC_FORMAT_1 = "DC-1"
@@ -50,6 +52,7 @@ class AutoDCRunResult:
     format_name: str
     output_file: Path | None = None
     scatter_manifest: Path | None = None
+    completed_types: tuple[str, ...] = ()
 
     def __bool__(self) -> bool:
         return self.success
@@ -117,6 +120,65 @@ def _validate_classic_dc_files(files: Iterable[Path]) -> None:
             raise DCFormatDetectionError(f"DC-1 文件缺少 Item 头部: {file_path}")
         if not any(_has_param(item_names, param) for param in _DC_SIGNAL_PARAMS):
             raise DCFormatDetectionError(f"DC-1 目录中的文件未发现 DC 参数: {file_path}")
+
+
+def _candidate_auxiliary_dirs(source_dir: Path, label: str) -> list[Path]:
+    """Return unambiguous classic DVDS/RG directories near the selected DC root."""
+    if source_dir.name.upper() == "DC":
+        roots = [source_dir.parent]
+        recursive = False
+    else:
+        roots = [source_dir]
+        recursive = True
+
+    candidates: set[Path] = set()
+    for root in roots:
+        directory_iter = root.rglob("*") if recursive else root.iterdir()
+        for path in directory_iter:
+            if path.is_dir() and path.name.upper() == label:
+                candidates.add(path.resolve())
+    return sorted(candidates, key=lambda path: str(path).lower())
+
+
+def _auxiliary_files(directory: Path, label: str) -> list[Path]:
+    files = sorted(
+        (
+            path
+            for path in directory.iterdir()
+            if path.is_file()
+            and path.suffix.lower() == ".csv"
+            and "DTA" in path.name.upper()
+            and label in path.name.upper()
+            and not path.name.startswith("~$")
+        ),
+        key=lambda path: str(path).lower(),
+    )
+    return files
+
+
+def _discover_classic_auxiliary_inputs(source_dir: Path) -> dict[str, Path]:
+    """Find and preflight optional DVDS/RG siblings for one classic DC input."""
+    discovered: dict[str, Path] = {}
+    for label, target_param in (("DVDS", "DVDS"), ("RG", "LCR-RG")):
+        candidates = _candidate_auxiliary_dirs(source_dir, label)
+        candidates = [path for path in candidates if _auxiliary_files(path, label)]
+        if len(candidates) > 1:
+            rendered = ", ".join(str(path) for path in candidates)
+            raise DCFormatDetectionError(
+                f"发现多个 {label} 数据目录，不能确定应与当前 DC 合并: {rendered}"
+            )
+        if not candidates:
+            continue
+        directory = candidates[0]
+        for file_path in _auxiliary_files(directory, label):
+            info = read_header_info(str(file_path))
+            item_names = info.get("item_names") or []
+            if not _has_param(item_names, target_param):
+                raise DCFormatDetectionError(
+                    f"{label} 目录文件缺少 {target_param} 参数: {file_path}"
+                )
+        discovered[label] = directory
+    return discovered
 
 
 def detect_dc_format(input_dir: str | Path) -> DCFormatDetection:
@@ -200,7 +262,7 @@ def detect_dc_format(input_dir: str | Path) -> DCFormatDetection:
 
 
 def run_auto_dc(input_dir: str | Path, output_dir: str | Path) -> AutoDCRunResult:
-    """Detect the input format, log the evidence, and run its cleaner."""
+    """Detect the input format and run the complete available cleaning bundle."""
 
     detection = detect_dc_format(input_dir)
     print("=" * 60)
@@ -216,18 +278,55 @@ def run_auto_dc(input_dir: str | Path, output_dir: str | Path) -> AutoDCRunResul
             format_name=detection.format_name,
             output_file=getattr(result, "output_file", None),
             scatter_manifest=getattr(result, "scatter_manifest", None),
+            completed_types=("DC", "DVDS", "RG") if result else (),
         )
+
+    auxiliary_inputs = (
+        _discover_classic_auxiliary_inputs(detection.source_dir)
+        if detection.format_name == DC_FORMAT_1
+        else {}
+    )
+    if auxiliary_inputs:
+        found = ", ".join(auxiliary_inputs)
+        print(f"DC-AI 发现分目录附加数据: {found}；将自动连续清洗")
+    else:
+        print("DC-AI 未发现可配对的 DVDS/RG 目录；本次仅清洗 DC")
 
     cleaner = JiequnDCCleaner(
         input_dir=detection.source_dir,
         output_dir=output_dir,
     )
     success = cleaner.process_all()
+    completed_types = ["DC"] if success else []
+    if success:
+        auxiliary_cleaners = (
+            ("DVDS", JiequnDVDSCleaner),
+            ("RG", JiequnRGCleaner),
+        )
+        for label, cleaner_class in auxiliary_cleaners:
+            auxiliary_input = auxiliary_inputs.get(label)
+            if auxiliary_input is None:
+                continue
+            print(f"DC-AI 开始自动清洗 {label}: {auxiliary_input}")
+            if not cleaner_class(
+                input_dir=auxiliary_input,
+                output_dir=output_dir,
+            ).process_all():
+                print(f"DC-AI {label} 清洗失败，完整任务未完成")
+                success = False
+                break
+            completed_types.append(label)
+
+    print(
+        "DC-AI 完成类型: "
+        + (", ".join(completed_types) if completed_types else "无")
+    )
     return AutoDCRunResult(
         success=success,
         format_name=detection.format_name,
         output_file=cleaner.last_output_file,
         scatter_manifest=cleaner.last_scatter_manifest,
+        completed_types=tuple(completed_types),
     )
 
 

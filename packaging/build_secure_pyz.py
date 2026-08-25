@@ -14,7 +14,7 @@ import glob
 import fnmatch
 from pathlib import Path
 
-VERSION = '2.13.0'
+VERSION = '2.14.0'
 
 # --- Configuration ---
 # Project root
@@ -232,6 +232,7 @@ Notes:
 - Dianji FT-ALL stores each run in a numbered product-family folder such as NCEAP016N85LL(M)_001.
 - Dianji restores one stable RAW order across both standard Item 29-31 permutations and the reviewed compact 32-Item mapping.
 - Dianji STS8203 supports the reviewed NCEAP40T20AGU(M)-7E00 layout, including verified 8/9-digit manufacturing lots, suffix -a, source segment 2, and cross-day tests whose Date matches Ending Time; unreviewed variants are rejected.
+- Jiequn cleaning uses one DC-AI button: unified CSV outputs DC/DVDS/RG, while classic folders automatically run the available DC/DVDS/RG cleaners.
 - Jiequn PAT previews a raw DTA CSV directory and calculates directly with bounded memory; it rejects mixed products and parameter schemas.
 - ASE and Dianji PAT keep their verified cleaned-workbook inputs; Dianji uses RAW/RAW_n while ASE uses DC/DVDS/RG_Data sheets.
 - SYL&SBL accepts one .xls or .xlsx yield workbook.

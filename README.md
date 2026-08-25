@@ -12,7 +12,7 @@
 | **杰群 批次1** | .csv 分目录 | DC / FT散点图 / DVDS / RG | ✅ 稳定 |
 | **杰群 批次2** | .csv 统一CSV | DC+DVDS+RG 合并 / DC散点图 | ✅ 稳定 |
 | **杰群 第三产线** | .csv 产品目录平铺、可变尾空列 | DC / FT散点图 | ✅ 可用 |
-| **杰群 DC-AI** | 自动识别上述三种目录/头部特征 | 自动分发清洗 / FT散点图 | ✅ 推荐入口 |
+| **杰群 DC-AI** | 自动识别上述三种目录/头部特征 | 自动完整清洗 DC/DVDS/RG / FT散点图 | ✅ 唯一清洗入口 |
 | PAT 参数分析 | 杰群原始 DTA CSV；其他厂按既有清洗结果契约 | 低内存逐文件统计汇总 | ✅ 可用 |
 | **电基 (Dianji)** | PowerTECH 伪 `.xls` / 原生 `.xlsx` / STS8203 `.csv` / DP1205 TF `.csv` | FT-ALL 自动识别清洗 / FT散点图 | ✅ 可用 |
 | **集佳 (Jijia)** | STS8203 GB18030 `.csv` | FT-ALL 清洗（ASE 风格 `DC_Data`） | ✅ 可用 |
@@ -100,7 +100,7 @@ python gui/main_window.py
 
 ### FT 参数散点图（日月新 / 杰群 / 电基）
 
-1. 选择支持散点图的清洗入口：日月新 `DC`、杰群 `DC-AI/DC-1/DC-统一CSV/DC-3`，或电基 `FT-ALL`。
+1. 选择支持散点图的清洗入口：日月新 `DC`、杰群 `DC-AI`，或电基 `FT-ALL`。
 2. 选择原始数据目录和输出目录后执行清洗。
 3. 清洗成功后，“FT 散点图”按钮自动启用；点击后打开浏览器页面。
 4. 页面按清洗结果的参数顺序一次展示全部图形；每个参数名称位于对应坐标轴上方，X 轴为 `C1（测试序号）`，Y 轴显示参数数值。
@@ -116,20 +116,17 @@ python gui/main_window.py
 
 ### 杰群面板说明
 
-第一行是原始数据文件格式/清洗入口，每次只选择一种：
+第一行只保留一个原始数据清洗入口：
 
 | 按钮 | 处理的数据格式 | 输入目录示例 | 输出 |
 |------|---------------|-------------|------|
-| **DC-AI** | 自动判断 DC-1 / DC-统一CSV / DC-3 | 指向任一单一格式目录 | 自动调用对应清洗器 |
-| **DC-1** | 分目录（data/杰群/.../DC/） | 指向 `data/杰群` 或 `DC` 目录 | NUM + 批次 + DC参数 |
-| **DC-统一CSV** | 单个CSV含 DC+DVDS+RG | 指向 `data/杰群2/RAW` | DC.xlsx + DVDS.xlsx + RG.xlsx |
-| **DC-3** | 第三产线产品目录平铺 DTA CSV | 指向 `data/DC1` 或产品目录 | NUM + 批次 + DC参数 |
-| **DVDS** | 分目录（data/杰群/.../DVDS/） | 指向 `data/杰群` | NUM + 批次 + DVDS(mV) |
-| **RG** | 分目录（data/杰群/.../RG/） | 指向 `data/杰群` | NUM + 批次 + RG(R) |
+| **DC-AI** | 自动判断 DC-1 / DC-统一CSV / DC-3 | 指向一个产品根目录、RAW 目录、DC 目录或第三产线产品目录 | 自动清洗实际存在的 DC/DVDS/RG |
 
 `DC-AI` 只读取目录结构和每个 DTA CSV 前40行内的 `Item` 头部，不读取测试数据行。
-若同一目录混有两种 DC 格式，或统一CSV只出现 DVDS 而缺少 `LCR-RG`，程序会停止并
-提示重新选择目录，不会猜测后继续清洗。详细规则见 `docs/杰群DC-AI自动识别说明.md`。
+识别为分目录格式时，程序先清洗 DC，再自动发现同级 DVDS、RG 并继续调用原有清洗器；
+缺少某个附加目录时只处理实际存在的数据。若同一目录混有两种格式、出现多个可配对
+的 DVDS/RG 目录，或统一CSV签名不完整，程序会停止而不猜测。详细规则见
+`docs/杰群DC-AI自动识别说明.md`。
 
 第二行是独立的 PAT 参数分析方法，不需要先生成清洗明细 Excel：
 
@@ -397,6 +394,7 @@ python gui/main_window.py
 
 ## 🔄 版本历史
 
+- **v2.14.0** (2026-08-25)：杰群清洗界面精简为唯一 `DC-AI` 入口。统一CSV继续自动输出 DC/DVDS/RG；分目录格式自动发现并连续调用既有 DC、DVDS、RG 清洗器；第三产线仅处理实际存在的 DC。真实分目录样本与原来分别点击三次的三个工作表内容完全一致。
 - **v2.13.0** (2026-08-25)：杰群 PAT 改为从 GUI 预览的原始 DTA CSV 目录直接计算；逐文件解析、分参数临时落盘并精确计算整体四分位数，避免先生成和再读取巨型清洗 Excel。拒绝混合产品和参数结构漂移，真实 520 文件、6,813,800 条含目标参数记录、23 参数与基准全量结果一致。
 - **v2.12.0** (2026-08-14)：新增集佳 `NCE15TD120BT` STS8203 GB18030 CSV 清洗。严格校验文件名、产品、测试批次元数据、123 列字段顺序及单位；按日月新格式输出 `NUM + lot_ID + 117参数` 到 `DC_Data`，不保留 `PASSFG/SOFT_BIN`，PASS/FAIL 记录全部保留，失败后未执行参数为空值。
 - **v2.11.0** (2026-08-13)：新增电基 `dj7/TF` DP1205 `SW+Trr` GB18030 CSV。严格校验产品、文件名/批次/开始时间、57 列表头、50 项顺序及单位，输出 `NUM + 批次 + 47参数`；逐文件保留上下限，`/` 转为空值，以有效 `Udc(V)` 作为入口保留规则。
@@ -692,7 +690,7 @@ _PARAM_UNITS = {
 - `DC-1`：路径中存在名称严格等于 `DC` 的分类型目录。
 - `DC-统一CSV`：平铺 DTA 的 `Item` 同时包含 DC 参数、`DVDS*` 与 `LCR-RG`。
 - `DC-3`：没有 `DC` 分类型目录，`Item` 有 DC 参数且没有 `DVDS*`。
-- `run_auto_dc(input_dir, output_dir)`：识别后分别调用 `JiequnDCCleaner` 或 `clean_unified.run`。
+- `run_auto_dc(input_dir, output_dir)`：统一CSV调用 `clean_unified.run`；分目录格式调用 DC 清洗器并自动串行调用检测到的 DVDS/RG 既有清洗器；DC-3 只调用 DC 清洗器。
 - 同一选择目录混入多个格式、缺少 Item、没有 DC 参数或统一CSV签名不完整时抛出可读错误，不执行清洗。
 
 ### `factories/jiequn/clean_unified.py` (杰群批次2)
@@ -785,10 +783,9 @@ Sigma, LCL\n计算值, UCL\n计算值, LCL\n更新前, UCL\n更新前, LCL\n更�
 **`panels/riyuexin_panel.py`：** 3 按钮（DC / DVDS / RG），默认路径 `~/Desktop`。
 - DVDS 通过 monkey-patch 调整 `c.dvds_dir` / `c.output_dir`（因为 `DVDSCleaner` 内部用 `base_dir` 派生路径）。
 
-**`panels/jiequn_panel.py`：** 第一行包含 DC-AI / DC-1 / DC-统一CSV / DC-3 / DVDS / RG 清洗入口，第二行是 PAT 参数分析，第三行是 SYL&SBL 良率分析。
+**`panels/jiequn_panel.py`：** 第一行只保留 DC-AI 清洗入口，第二行是 PAT 参数分析，第三行是 SYL&SBL 良率分析。
 - 输入/输出默认路径与日月新一致，启动后都指向用户桌面。
-- `DC-AI` 为默认选择，调用 `dc_auto.run_auto_dc(inp, out)`；三个手工 DC 入口继续保留。
-- `DC-统一CSV` 调 `clean_unified.run(inp, out)`。
+- `DC-AI` 为唯一清洗选择，调用 `dc_auto.run_auto_dc(inp, out)`；具体格式和 DVDS/RG 配对由后端确定性识别。
 - “PAT” 使用目录选择器预览杰群原始 DTA CSV 目录，调用 `generate_raw_pat()` 直接计算。
 - 用户切换 DC-AI、各手工清洗入口或 PAT 时会分别记忆路径，不会覆盖已选择的桌面或业务目录。
 

@@ -22,12 +22,15 @@ class DetectDCFormatTests(unittest.TestCase):
             root = Path(temp)
             _write_dta(root / "product" / "DC", ["VTH", "BVDSS", "RDON"])
             _write_dta(root / "product" / "DVDS", ["DVDS_EX"], "sample_DVDSDTA.CSV")
+            _write_dta(root / "product" / "RG", ["LCR-RG"], "sample_RGDTA.CSV")
 
             result = dc_auto.detect_dc_format(root)
+            auxiliary = dc_auto._discover_classic_auxiliary_inputs(result.source_dir)
 
             self.assertEqual(result.format_name, dc_auto.DC_FORMAT_1)
             self.assertEqual(result.file_count, 1)
             self.assertEqual(result.source_dir, root)
+            self.assertEqual(set(auxiliary), {"DVDS", "RG"})
 
     def test_detects_unified_csv_from_item_features(self):
         with tempfile.TemporaryDirectory() as temp:
@@ -91,6 +94,56 @@ class RunAutoDCTests(unittest.TestCase):
                 output_dir="output",
             )
             cleaner_cls.return_value.process_all.assert_called_once_with()
+
+    def test_dc1_runs_available_dc_dvds_and_rg_cleaners(self):
+        detection = dc_auto.DCFormatDetection(
+            format_name=dc_auto.DC_FORMAT_1,
+            source_dir=Path("source"),
+            files=(Path("source/DC/sampleDTA.CSV"),),
+            reason="test",
+        )
+        auxiliary = {"DVDS": Path("source/DVDS"), "RG": Path("source/RG")}
+        with patch.object(dc_auto, "detect_dc_format", return_value=detection), patch.object(
+            dc_auto, "_discover_classic_auxiliary_inputs", return_value=auxiliary
+        ), patch.object(dc_auto, "JiequnDCCleaner") as dc_cls, patch.object(
+            dc_auto, "JiequnDVDSCleaner"
+        ) as dvds_cls, patch.object(dc_auto, "JiequnRGCleaner") as rg_cls:
+            dc_cls.return_value.process_all.return_value = True
+            dvds_cls.return_value.process_all.return_value = True
+            rg_cls.return_value.process_all.return_value = True
+
+            result = dc_auto.run_auto_dc("ignored", "output")
+
+            self.assertTrue(result)
+            self.assertEqual(result.completed_types, ("DC", "DVDS", "RG"))
+            dvds_cls.assert_called_once_with(
+                input_dir=Path("source/DVDS"), output_dir="output"
+            )
+            rg_cls.assert_called_once_with(
+                input_dir=Path("source/RG"), output_dir="output"
+            )
+
+    def test_dc3_does_not_probe_or_run_auxiliary_cleaners(self):
+        detection = dc_auto.DCFormatDetection(
+            format_name=dc_auto.DC_FORMAT_3,
+            source_dir=Path("source"),
+            files=(Path("source/sampleDTA.CSV"),),
+            reason="test",
+        )
+        with patch.object(dc_auto, "detect_dc_format", return_value=detection), patch.object(
+            dc_auto, "_discover_classic_auxiliary_inputs"
+        ) as discover, patch.object(dc_auto, "JiequnDCCleaner") as dc_cls, patch.object(
+            dc_auto, "JiequnDVDSCleaner"
+        ) as dvds_cls, patch.object(dc_auto, "JiequnRGCleaner") as rg_cls:
+            dc_cls.return_value.process_all.return_value = True
+
+            result = dc_auto.run_auto_dc("ignored", "output")
+
+            self.assertTrue(result)
+            self.assertEqual(result.completed_types, ("DC",))
+            discover.assert_not_called()
+            dvds_cls.assert_not_called()
+            rg_cls.assert_not_called()
 
     def test_dispatches_unified_to_unified_cleaner(self):
         detection = dc_auto.DCFormatDetection(

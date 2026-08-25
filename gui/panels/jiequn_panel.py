@@ -16,10 +16,10 @@ from factories.jiequn.config import FACTORY_NAME
 
 class JiequnPanel(BasePanel):
     factory_name = FACTORY_NAME
-    data_types = ["DC-AI", "DC-1", "DC-统一CSV", "DC-3", "DVDS", "RG"]
+    data_types = ["DC-AI"]
     pat_analysis_types = ["PAT"]
     yield_analysis_types = ["SYL&SBL"]
-    scatter_supported_types = ["DC-AI", "DC-1", "DC-统一CSV", "DC-3"]
+    scatter_supported_types = ["DC-AI"]
     default_input = str(Path.home() / "Desktop")
     default_output = str(Path.home() / "Desktop")
 
@@ -108,9 +108,9 @@ class JiequnPanel(BasePanel):
             )
             self.input_browse_btn.setText("预览文件目录...")
         elif data_type == "DC-AI" and hasattr(self, "input_edit"):
-            self.input_label.setText("杰群 DC 数据文件夹:")
+            self.input_label.setText("杰群原始数据文件夹:")
             self.input_edit.setPlaceholderText(
-                "选择单一格式的 DC-1、DC-统一CSV 或 DC-3 数据目录..."
+                "选择一种杰群格式；分目录数据会自动连续清洗 DC、DVDS、RG..."
             )
 
     def _action_text_for(self, data_type: str) -> str:
@@ -135,8 +135,9 @@ class JiequnPanel(BasePanel):
             return True
         raise RuntimeError(
             f"杰群 {label} 处理没有生成有效结果。请确认输入目录是否选对："
-            "DC-AI 一次只能选择一种杰群 DC 格式；DC-1/DVDS/RG 使用分类型目录；"
-            "DC-统一CSV 选择 RAW 目录；DC-3 可选择第三产线根目录或产品目录；"
+            "DC-AI 一次只能选择一种杰群格式；分目录格式请选择包含 DC/DVDS/RG "
+            "子目录的产品根目录（也可直接选 DC）；统一CSV选择 RAW 目录；"
+            "第三产线可选择根目录或产品目录；"
             "PAT 选择包含原始 DTA CSV 的产品目录或分类型数据根目录；"
             "SYL&SBL 使用单个良率 Excel 文件。"
         )
