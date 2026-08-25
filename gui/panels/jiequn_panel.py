@@ -16,7 +16,7 @@ from factories.jiequn.config import FACTORY_NAME
 
 class JiequnPanel(BasePanel):
     factory_name = FACTORY_NAME
-    data_types = ["DC-AI"]
+    data_types = ["DC-AI", "DVDS", "RG"]
     pat_analysis_types = ["PAT"]
     yield_analysis_types = ["SYL&SBL"]
     scatter_supported_types = ["DC-AI"]
@@ -112,6 +112,11 @@ class JiequnPanel(BasePanel):
             self.input_edit.setPlaceholderText(
                 "选择一种杰群格式；分目录数据会自动连续清洗 DC、DVDS、RG..."
             )
+        elif data_type in {"DVDS", "RG"} and hasattr(self, "input_edit"):
+            self.input_label.setText(f"杰群 {data_type} 数据文件夹:")
+            self.input_edit.setPlaceholderText(
+                f"选择专用 {data_type} 目录，或包含该子目录的产品目录..."
+            )
 
     def _action_text_for(self, data_type: str) -> str:
         if data_type == "DC-AI":
@@ -138,6 +143,7 @@ class JiequnPanel(BasePanel):
             "DC-AI 一次只能选择一种杰群格式；分目录格式请选择包含 DC/DVDS/RG "
             "子目录的产品根目录（也可直接选 DC）；统一CSV选择 RAW 目录；"
             "第三产线可选择根目录或产品目录；"
+            "专用 DVDS 或 RG 数据请使用对应的独立按钮；"
             "PAT 选择包含原始 DTA CSV 的产品目录或分类型数据根目录；"
             "SYL&SBL 使用单个良率 Excel 文件。"
         )

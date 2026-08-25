@@ -14,7 +14,7 @@ python gui/main_window.py
 python packaging/release/ft_data_cleaner.pyz
 ```
 
-GUI 入口是 `gui.main_window:main`，版本为 2.14.0。
+GUI 入口是 `gui.main_window:main`，版本为 2.14.1。
 
 ## 界面结构
 
@@ -39,7 +39,8 @@ GUI 入口是 `gui.main_window:main`，版本为 2.14.0。
 
 ## 杰群 DC-AI
 
-杰群面板只保留 `DC-AI` 一个清洗入口。格式识别和分目录的 DVDS/RG 配对均由后端完成。
+杰群面板保留 `DC-AI`、`DVDS`、`RG` 三个清洗入口。三个手工 DC 格式按钮已隐藏；
+格式识别和产品根目录中的 DVDS/RG 配对由后端完成，纯 DVDS/RG 目录使用专用按钮。
 
 `DC-AI` 只读取目录结构和 DTA CSV 的 Item 头部：
 
@@ -70,6 +71,7 @@ GUI 入口是 `gui.main_window:main`，版本为 2.14.0。
   `DC_Data_1/2/3`，电基读取 `RAW/RAW_1/RAW_2`。
 - SYL&SBL：选择一个工厂良率 `.xls/.xlsx` 文件，输出到单独目录。
 - 杰群 DC-AI：输入为目录，输出为目录；自动处理实际存在的 DC/DVDS/RG。
+- 杰群 DVDS/RG：输入为对应专用目录或包含该子目录的单产品目录，输出为目录。
 
 ## 开发验证
 

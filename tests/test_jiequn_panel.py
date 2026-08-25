@@ -26,13 +26,49 @@ class JiequnPanelTests(unittest.TestCase):
     def tearDown(self):
         self.panel.close()
 
-    def test_dc_ai_is_the_only_cleaning_entry(self):
+    def test_dc_ai_keeps_standalone_dvds_and_rg_entries(self):
         self.assertEqual(self.panel._selected_type, "DC-AI")
         self.assertEqual(
             self.panel.data_types,
-            ["DC-AI"],
+            ["DC-AI", "DVDS", "RG"],
         )
         self.assertEqual(self.panel.start_btn.text(), "自动识别并清洗")
+
+    def test_standalone_dvds_uses_specialized_cleaner_and_directory_ui(self):
+        self.panel._on_type_selected("DVDS")
+        self.panel.input_edit.setText(r"F:\data\jiequn\DVDS")
+        self.panel.output_edit.setText(r"F:\data\output")
+
+        self.assertEqual(self.panel.input_label.text(), "杰群 DVDS 数据文件夹:")
+        self.assertIn("专用 DVDS 目录", self.panel.input_edit.placeholderText())
+        self.assertEqual(self.panel.start_btn.text(), "开始清洗")
+
+        with patch(
+            "factories.jiequn.dvds_cleaner.JiequnDVDSCleaner"
+        ) as cleaner_cls:
+            cleaner_cls.return_value.process_all.return_value = True
+
+            self.assertTrue(self.panel._get_cleaner_fn("DVDS")())
+
+        cleaner_cls.assert_called_once_with(
+            input_dir=r"F:\data\jiequn\DVDS",
+            output_dir=r"F:\data\output",
+        )
+
+    def test_standalone_rg_uses_specialized_cleaner(self):
+        self.panel._on_type_selected("RG")
+        self.panel.input_edit.setText(r"F:\data\jiequn\RG")
+        self.panel.output_edit.setText(r"F:\data\output")
+
+        with patch("factories.jiequn.rg_cleaner.JiequnRGCleaner") as cleaner_cls:
+            cleaner_cls.return_value.process_all.return_value = True
+
+            self.assertTrue(self.panel._get_cleaner_fn("RG")())
+
+        cleaner_cls.assert_called_once_with(
+            input_dir=r"F:\data\jiequn\RG",
+            output_dir=r"F:\data\output",
+        )
 
     def test_dc_ai_calls_factory_auto_dispatcher(self):
         with patch("factories.jiequn.dc_auto.run_auto_dc", return_value=True) as run_auto_dc:
