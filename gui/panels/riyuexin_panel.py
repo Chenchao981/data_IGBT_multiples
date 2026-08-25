@@ -59,11 +59,14 @@ class RiyuexinPanel(BasePanel):
             return lambda: bool(RGCleaner(input_dir=inp, output_dir=out).run())
 
         elif data_type == "PAT":
-            from factories.riyuexin.pat_cleaner import generate_pat
-            source_files = self.selected_input_files()
-            return lambda: self._require_success(
-                "PAT", bool(generate_pat(source_files=source_files, output_dir=out))
-            )
+            from factories.riyuexin.pat_cleaner import generate_raw_pat
+
+            def _run_raw_pat():
+                output_file = generate_raw_pat(source_dir=inp, output_dir=out)
+                self._require_success("PAT", bool(output_file))
+                return OperationResult(success=True, output_file=Path(output_file))
+
+            return _run_raw_pat
 
         elif data_type == "SYL&SBL":
             from factories.riyuexin.yield_report import generate_report
@@ -73,11 +76,35 @@ class RiyuexinPanel(BasePanel):
 
         return lambda: False
 
+    def _apply_operation_ui(self, data_type: str):
+        super()._apply_operation_ui(data_type)
+        if data_type == "PAT" and hasattr(self, "input_edit"):
+            self.input_label.setText("PAT 原始文件目录:")
+            self.input_edit.setPlaceholderText(
+                "选择日月新产品根目录或 DC/DVDS/RG 原始文件目录..."
+            )
+            self.input_browse_btn.setText("预览文件目录...")
+
+    def _input_mode_for(self, data_type: str) -> str:
+        if data_type == "PAT":
+            return "directory"
+        return super()._input_mode_for(data_type)
+
+    def _action_text_for(self, data_type: str) -> str:
+        if data_type == "PAT":
+            return "计算 PAT"
+        return super()._action_text_for(data_type)
+
+    def _missing_input_message(self) -> str:
+        if self._selected_type == "PAT":
+            return "请选择包含日月新原始 XLSX 的目标目录"
+        return super()._missing_input_message()
+
     def _require_success(self, label: str, result: bool) -> bool:
         if result:
             return True
         raise RuntimeError(
             f"日月新 {label} 处理没有生成有效结果。"
-            "PAT 请选择一个或多个已清洗 DC/DVDS/RG Excel 文件；"
+            "PAT 请选择产品根目录或原始 DC/DVDS/RG XLSX 目录；"
             "SYL&SBL 请选择封装厂良率 Excel 文件。"
         )

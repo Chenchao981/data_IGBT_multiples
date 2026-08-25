@@ -4,8 +4,9 @@ from pathlib import Path
 
 import pandas as pd
 
-from factories.dianji.pat_cleaner import build_pat, generate_pat
+from factories.dianji.pat_cleaner import build_pat, build_raw_pat, generate_pat
 from factories.jiequn.pat_cleaner import build_pat as build_standard_pat
+from tests.test_dianji_powertech_xlsx_cleaner import _make_source
 
 
 def _write_workbook(path: Path, sheets: dict[str, pd.DataFrame]) -> Path:
@@ -16,6 +17,21 @@ def _write_workbook(path: Path, sheets: dict[str, pd.DataFrame]) -> Path:
 
 
 class DianjiPatTests(unittest.TestCase):
+    def test_builds_pat_directly_from_registered_raw_directory(self):
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            source = root / "raw"
+            source.mkdir()
+            _make_source(source)
+
+            result = build_raw_pat(source, spool_dir=root / "spool", progress_interval=0)
+
+        stats = result.iloc[1:].set_index("统计量")
+        self.assertIn("DVCE(mV)", stats.index)
+        self.assertEqual(int(stats.loc["DVCE(mV)", "总计数"]), 2)
+        self.assertGreaterEqual(len(stats), 7)
+        self.assertNotIn("批次", stats.index)
+
     def test_aggregates_raw_split_sheets_and_multiple_files(self):
         with tempfile.TemporaryDirectory() as temp:
             root = Path(temp)

@@ -13,7 +13,7 @@
 | **杰群 批次2** | .csv 统一CSV | DC+DVDS+RG 合并 / DC散点图 | ✅ 稳定 |
 | **杰群 第三产线** | .csv 产品目录平铺、可变尾空列 | DC / FT散点图 | ✅ 可用 |
 | **杰群清洗** | DC-AI + 专用 DVDS/RG | 自动完整清洗或单独清洗 DVDS/RG / FT散点图 | ✅ 可用 |
-| PAT 参数分析 | 杰群原始 DTA CSV；其他厂按既有清洗结果契约 | 低内存逐文件统计汇总 | ✅ 可用 |
+| PAT 参数分析 | 日月新 / 杰群 / 电基原始文件目标目录 | 低内存逐文件统计汇总 | ✅ 可用 |
 | **电基 (Dianji)** | PowerTECH 伪 `.xls` / 原生 `.xlsx` / STS8203 `.csv` / DP1205 TF `.csv` | FT-ALL 自动识别清洗 / FT散点图 | ✅ 可用 |
 | **集佳 (Jijia)** | STS8203 GB18030 `.csv` | FT-ALL 清洗（ASE 风格 `DC_Data`） | ✅ 可用 |
 
@@ -64,7 +64,8 @@ data_IGBT_multiple/
 │       └── dc_cleaner.py           ← FT-ALL → ASE 风格 DC_Data
 │
 ├── shared/
-│   └── excel_utils.py              ← Excel/CSV 读写工具（.xls/.xlsx/.csv）
+│   ├── excel_utils.py              ← Excel/CSV 读写工具（.xls/.xlsx/.csv）
+│   └── pat_engine.py               ← 统一低内存 PAT 统计核心
 │
 ├── frontend/
 │   ├── ft_scatter.py               ← 散点图数据包与 Plotly 图形逻辑
@@ -296,8 +297,9 @@ UCL = 中位数 + 6 * Sigma
 ```
 
 输出：`PAT_NNN/PAT_NNN.xlsx`，含每个参数的 count/mean/std/min/Q1/median/Q3/max/Sigma/LCL/UCL。
-杰群直接读取原始 DTA CSV，并沿用清洗器的参数命名和单位换算；日月新继续读取
-`DC_Data/DVDS_Data/RG_Data`，电基继续读取 `RAW/RAW_n`。三者共用同一个统计公式。
+日月新、杰群和电基都直接读取用户选择目标目录中的原始文件，逐文件提取参数并把数值
+临时分参数落盘，再逐参数计算精确四分位数。三家共用同一个统计核心、公式和输出格式，
+不再要求先生成或选择清洗结果 Excel。
 
 ---
 
@@ -401,6 +403,7 @@ python gui/main_window.py
 
 ## 🔄 版本历史
 
+- **v2.15.0** (2026-08-25)：将杰群已验证的“原始目录直读、逐文件提取、分参数临时落盘、精确 PAT”统一到日月新和电基。三家 GUI 的 PAT 均改为选择原始文件目标目录；电基四种已注册源格式全部实测通过，PowerTECH XLSX 14 文件结果与清洗工作簿逐值一致。同步修复日月新 DVDS 不同导出版本中 `Unit`/`Test No.` 行号变化导致的 `DVDS(nan)` 与漏数问题。
 - **v2.14.2** (2026-08-25)：杰群 DVDS/RG 专用按钮增加已清洗输出目录识别。若输入目录中存在唯一且工作表结构正确的 `DVDS_Data` 或 `RG_Data` 工作簿，直接返回该现成结果并明确记录“跳过重复清洗”；多个候选结果仍拒绝处理。修复把 `CJSx185_001` 输出目录误当原始 RG 目录后出现的 `/RG` 不存在报错。
 - **v2.14.1** (2026-08-25)：根据纯 DVDS/RG 专用目录的实际操作场景，恢复杰群 `DVDS`、`RG` 独立按钮；界面精简为 `DC-AI / DVDS / RG`，仍隐藏三个手工 DC 格式按钮。`DC-AI` 继续支持产品根目录一键完整清洗，专用按钮允许直接选择纯 DVDS 或纯 RG 目录。
 - **v2.14.0** (2026-08-25)：杰群清洗界面曾精简为唯一 `DC-AI` 入口。统一CSV自动输出 DC/DVDS/RG；分目录格式自动发现并连续调用既有 DC、DVDS、RG 清洗器；第三产线仅处理实际存在的 DC。真实分目录样本与原来分别点击三次的三个工作表内容完全一致。v2.14.1 根据纯目录场景恢复专用 DVDS/RG 按钮。

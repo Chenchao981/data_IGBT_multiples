@@ -32,7 +32,7 @@ class DianjiPanelTests(unittest.TestCase):
         self.assertEqual(self.panel.pat_analysis_types, ["PAT"])
         self.assertEqual(self.panel.yield_analysis_types, ["SYL&SBL"])
         self.assertEqual(self.panel._input_mode_for("FT-ALL"), "directory")
-        self.assertEqual(self.panel._input_mode_for("PAT"), "files")
+        self.assertEqual(self.panel._input_mode_for("PAT"), "directory")
         self.assertEqual(self.panel._input_mode_for("SYL&SBL"), "file")
         self.assertEqual(self.panel.start_btn.text(), "开始清洗")
 
@@ -70,25 +70,27 @@ class DianjiPanelTests(unittest.TestCase):
                 self.panel._on_finished("电基 FT-ALL 完成", True)
             self.assertTrue(self.panel.scatter_btn.isEnabled())
 
-    def test_pat_calls_dianji_report_with_selected_cleaned_files(self):
-        self.panel.input_edit.setText(
-            r"F:\data\dianji_1.xlsx | F:\data\dianji_2.xlsx"
-        )
+    def test_pat_uses_raw_directory_and_direct_pat_entrypoint(self):
+        self.panel._on_type_selected("PAT")
+        self.panel.input_edit.setText(r"F:\data\dianji_raw")
+        self.panel.output_edit.setText(r"F:\data\dianji_output")
+
+        self.assertEqual(self.panel.input_label.text(), "PAT 原始文件目录:")
+        self.assertEqual(self.panel.input_browse_btn.text(), "预览文件目录...")
+        self.assertEqual(self.panel.start_btn.text(), "计算 PAT")
+
         with patch(
-            "factories.dianji.pat_cleaner.generate_pat",
-            return_value=r"F:\data\PAT_001\PAT_001.xlsx",
-        ) as generate_pat:
-            task = self.panel._get_cleaner_fn("PAT")
+            "factories.dianji.pat_cleaner.generate_raw_pat",
+            return_value=Path(r"F:\data\PAT_001\PAT_001.xlsx"),
+        ) as generate_raw_pat:
+            result = self.panel._get_cleaner_fn("PAT")()
 
-            self.assertTrue(task())
-
-            generate_pat.assert_called_once_with(
-                source_files=[
-                    r"F:\data\dianji_1.xlsx",
-                    r"F:\data\dianji_2.xlsx",
-                ],
-                output_dir=r"F:\data\dianji_output",
-            )
+        self.assertIsInstance(result, OperationResult)
+        self.assertEqual(result.output_file.name, "PAT_001.xlsx")
+        generate_raw_pat.assert_called_once_with(
+            source_dir=r"F:\data\dianji_raw",
+            output_dir=r"F:\data\dianji_output",
+        )
 
 
 if __name__ == "__main__":

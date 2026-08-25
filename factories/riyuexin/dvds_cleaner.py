@@ -162,17 +162,44 @@ class DVDSCleaner:
                 logging.error(f"在第2行未找到DVDS列: {filename}")
                 return pd.DataFrame()
             
-            # 2. 获取DVDS单位
-            unit_value = df.iloc[6, dvds_col]  # 第7行 (索引为6)
+            # 2. 动态获取DVDS单位。不同 ASE 导出版本的 Unit 行可能在第5或第7行。
+            unit_value = None
+            for row_idx in range(min(10, len(df))):
+                row_values = {
+                    str(value).strip().upper()
+                    for value in df.iloc[row_idx].tolist()
+                    if pd.notna(value)
+                }
+                if "UNIT" in row_values and dvds_col < df.shape[1]:
+                    candidate = df.iat[row_idx, dvds_col]
+                    if pd.notna(candidate) and str(candidate).strip():
+                        unit_value = str(candidate).strip()
+                        break
+            if unit_value is None and len(df) > 6:
+                candidate = df.iat[6, dvds_col]
+                if pd.notna(candidate) and str(candidate).strip():
+                    unit_value = str(candidate).strip()
+            if unit_value is None:
+                logging.error(f"无法定位DVDS单位: {filename}")
+                return pd.DataFrame()
             logging.info(f"DVDS单位: {unit_value}")
             
-            # 3. 确认第19行是Test No.行
-            test_no_row = 18  # 第19行 (索引为18)
-            if str(df.iloc[test_no_row, 0]).strip() != "Test No.":
-                logging.warning(f"第19行第1列不是'Test No.': {filename}")
+            # 3. 动态定位 Test No. 行。不同导出版本可能为第17或第19行。
+            test_no_row = None
+            for row_idx in range(len(df)):
+                if any(
+                    "TEST NO" in str(value).strip().upper()
+                    for value in df.iloc[row_idx].tolist()
+                    if pd.notna(value)
+                ):
+                    test_no_row = row_idx
+                    break
+            if test_no_row is None:
+                logging.error(f"未找到Test No.行: {filename}")
+                return pd.DataFrame()
             
-            # 4. 从第20行开始提取数据
-            data_start_row = 19  # 第20行 (索引为19)
+            # 4. 从 Test No. 下一行开始提取数据
+            data_start_row = test_no_row + 1
             dvds_values = []
             
             for row_idx in range(data_start_row, df.shape[0]):
