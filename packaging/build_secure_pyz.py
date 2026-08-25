@@ -14,7 +14,7 @@ import glob
 import fnmatch
 from pathlib import Path
 
-VERSION = '2.14.1'
+VERSION = '2.14.2'
 
 # --- Configuration ---
 # Project root
@@ -233,6 +233,7 @@ Notes:
 - Dianji restores one stable RAW order across both standard Item 29-31 permutations and the reviewed compact 32-Item mapping.
 - Dianji STS8203 supports the reviewed NCEAP40T20AGU(M)-7E00 layout, including verified 8/9-digit manufacturing lots, suffix -a, source segment 2, and cross-day tests whose Date matches Ending Time; unreviewed variants are rejected.
 - Jiequn cleaning keeps DC-AI plus standalone DVDS/RG buttons: product roots can run the complete bundle, while pure DVDS/RG directories use their specialized cleaners.
+- Jiequn standalone DVDS/RG safely recognizes one existing valid cleaned workbook and skips duplicate cleaning; ambiguous result directories are rejected.
 - Jiequn PAT previews a raw DTA CSV directory and calculates directly with bounded memory; it rejects mixed products and parameter schemas.
 - ASE and Dianji PAT keep their verified cleaned-workbook inputs; Dianji uses RAW/RAW_n while ASE uses DC/DVDS/RG_Data sheets.
 - SYL&SBL accepts one .xls or .xlsx yield workbook.

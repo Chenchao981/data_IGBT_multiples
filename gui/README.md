@@ -14,7 +14,7 @@ python gui/main_window.py
 python packaging/release/ft_data_cleaner.pyz
 ```
 
-GUI 入口是 `gui.main_window:main`，版本为 2.14.1。
+GUI 入口是 `gui.main_window:main`，版本为 2.14.2。
 
 ## 界面结构
 
@@ -72,6 +72,7 @@ GUI 入口是 `gui.main_window:main`，版本为 2.14.1。
 - SYL&SBL：选择一个工厂良率 `.xls/.xlsx` 文件，输出到单独目录。
 - 杰群 DC-AI：输入为目录，输出为目录；自动处理实际存在的 DC/DVDS/RG。
 - 杰群 DVDS/RG：输入为对应专用目录或包含该子目录的单产品目录，输出为目录。
+- 若 DVDS/RG 输入已经是包含唯一合法结果工作簿的输出目录，程序返回现成结果并跳过重复清洗。
 
 ## 开发验证
 

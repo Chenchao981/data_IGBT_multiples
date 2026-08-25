@@ -61,11 +61,29 @@ class JiequnPanel(BasePanel):
 
         elif data_type == "DVDS":
             from factories.jiequn.dvds_cleaner import JiequnDVDSCleaner
-            return lambda: self._require_success("DVDS", JiequnDVDSCleaner(input_dir=inp, output_dir=out).process_all())
+
+            def _run_dvds():
+                cleaner = JiequnDVDSCleaner(input_dir=inp, output_dir=out)
+                self._require_success("DVDS", cleaner.process_all())
+                return OperationResult(
+                    success=True,
+                    output_file=cleaner.last_output_file,
+                )
+
+            return _run_dvds
 
         elif data_type == "RG":
             from factories.jiequn.rg_cleaner import JiequnRGCleaner
-            return lambda: self._require_success("RG", JiequnRGCleaner(input_dir=inp, output_dir=out).process_all())
+
+            def _run_rg():
+                cleaner = JiequnRGCleaner(input_dir=inp, output_dir=out)
+                self._require_success("RG", cleaner.process_all())
+                return OperationResult(
+                    success=True,
+                    output_file=cleaner.last_output_file,
+                )
+
+            return _run_rg
 
         elif data_type in {"统一CSV", "DC-统一CSV"}:
             from factories.jiequn.clean_unified import run_with_result

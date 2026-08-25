@@ -47,13 +47,18 @@ class JiequnPanelTests(unittest.TestCase):
             "factories.jiequn.dvds_cleaner.JiequnDVDSCleaner"
         ) as cleaner_cls:
             cleaner_cls.return_value.process_all.return_value = True
+            cleaner_cls.return_value.last_output_file = Path(
+                r"F:\data\output\DVDS.xlsx"
+            )
 
-            self.assertTrue(self.panel._get_cleaner_fn("DVDS")())
+            result = self.panel._get_cleaner_fn("DVDS")()
 
         cleaner_cls.assert_called_once_with(
             input_dir=r"F:\data\jiequn\DVDS",
             output_dir=r"F:\data\output",
         )
+        self.assertIsInstance(result, OperationResult)
+        self.assertEqual(result.output_file.name, "DVDS.xlsx")
 
     def test_standalone_rg_uses_specialized_cleaner(self):
         self.panel._on_type_selected("RG")
@@ -62,13 +67,16 @@ class JiequnPanelTests(unittest.TestCase):
 
         with patch("factories.jiequn.rg_cleaner.JiequnRGCleaner") as cleaner_cls:
             cleaner_cls.return_value.process_all.return_value = True
+            cleaner_cls.return_value.last_output_file = Path(r"F:\data\output\RG.xlsx")
 
-            self.assertTrue(self.panel._get_cleaner_fn("RG")())
+            result = self.panel._get_cleaner_fn("RG")()
 
         cleaner_cls.assert_called_once_with(
             input_dir=r"F:\data\jiequn\RG",
             output_dir=r"F:\data\output",
         )
+        self.assertIsInstance(result, OperationResult)
+        self.assertEqual(result.output_file.name, "RG.xlsx")
 
     def test_dc_ai_calls_factory_auto_dispatcher(self):
         with patch("factories.jiequn.dc_auto.run_auto_dc", return_value=True) as run_auto_dc:

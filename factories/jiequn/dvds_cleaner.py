@@ -14,6 +14,7 @@ from factories.base.base_cleaner import BaseCleaner
 from factories.jiequn.config import TYPE_SUBDIRS, UNIT_CONVERSIONS
 from factories.jiequn.csv_parser import parse_dta_csv
 from factories.jiequn.formatting import BATCH_COL, normalize_output_columns
+from factories.jiequn.result_detection import find_existing_specialized_result
 from shared.excel_utils import create_output_run_dir, generate_run_filename, write_excel_fast
 
 DVDS_PARAMS = ["DVDS"]
@@ -32,6 +33,7 @@ class JiequnDVDSCleaner(BaseCleaner):
         if output_dir is None:
             output_dir = "output/杰群-output"
         super().__init__(input_dir, output_dir)
+        self.last_output_file: Path | None = None
 
     def _get_subdir(self) -> Path:
         sub = TYPE_SUBDIRS.get("DVDS", "DVDS")
@@ -51,7 +53,14 @@ class JiequnDVDSCleaner(BaseCleaner):
         logger.info("杰群 DVDS 数据清洗")
         logger.info("=" * 50)
 
+        self.last_output_file = None
         try:
+            existing = find_existing_specialized_result(self.input_dir, "DVDS")
+            if existing is not None:
+                self.last_output_file = existing
+                logger.info(f"检测到已有 DVDS 清洗结果，跳过重复清洗: {existing}")
+                return True
+
             dvds_dir = self._get_subdir()
             logger.info(f"DVDS 目录: {dvds_dir}")
 
@@ -83,7 +92,9 @@ class JiequnDVDSCleaner(BaseCleaner):
             zhouji_list = merged[BATCH_COL].tolist()
             run_dir = create_output_run_dir(self.output_dir, zhouji_list)
             out = run_dir / generate_run_filename(run_dir)
-            write_excel_fast(merged, out, sheet_name='DVDS_Data')
+            if not write_excel_fast(merged, out, sheet_name='DVDS_Data'):
+                raise OSError(f"杰群 DVDS 清洗结果写入失败: {out}")
+            self.last_output_file = out.resolve()
 
             logger.info(f"保存: {out} ({len(merged):,} 行)")
             return True
