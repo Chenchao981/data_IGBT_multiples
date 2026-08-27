@@ -48,7 +48,7 @@ class JijiaPanelTests(unittest.TestCase):
         self.assertEqual(
             names,
             [
-                "日月新 (ASE)",
+                "日月新 (Riyuexin)",
                 "杰群 (Jiequn)",
                 "电基 (Dianji)",
                 "集佳 (Jijia)",

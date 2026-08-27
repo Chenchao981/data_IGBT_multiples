@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 
-"""日月新（ASE）面板"""
+"""日月新（Riyuexin）面板。"""
 
 import sys
 from pathlib import Path

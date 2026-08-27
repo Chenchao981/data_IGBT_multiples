@@ -1,4 +1,4 @@
-"""Clean approved Jijia FT CSV files into the ASE-style DC workbook."""
+"""Clean approved Jijia FT CSV files into the Riyuexin-compatible DC workbook."""
 
 from __future__ import annotations
 

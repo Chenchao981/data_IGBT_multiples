@@ -64,7 +64,7 @@ class DCDataCleaner:
 
     @staticmethod
     def _source_id(file_path: Path) -> str:
-        """Return the tester/source identifier at the start of an ASE filename."""
+        """Return the tester/source identifier at the start of a Riyuexin filename."""
         return file_path.stem.split("_", 1)[0].strip() or file_path.stem
 
     @staticmethod
@@ -184,7 +184,7 @@ class DCDataCleaner:
     def identify_hrdon_alias_columns(
         self, df: pd.DataFrame, test_params: List[Tuple[int, str]]
     ) -> set:
-        """识别被新版ASE源文件误标为RDON的高栅压HRDON列。
+        """识别被新版日月新源文件误标为RDON的高栅压HRDON列。
 
         旧版文件使用 ``HRDON + RDON``，新版文件将两列都写成
         ``RDON + RDON``。当源文件没有显式HRDON且存在多个RDON时，
@@ -217,7 +217,7 @@ class DCDataCleaner:
 
         alias_columns = {col for col, value in gate_voltages if value == max_voltage}
         logger.info(
-            f"检测到ASE新版重复RDON表头，将高栅压列 {sorted(alias_columns)} "
+            f"检测到日月新新版重复RDON表头，将高栅压列 {sorted(alias_columns)} "
             f"统一为HRDON (VG/VGS={max_voltage:g}V)"
         )
         return alias_columns
@@ -271,7 +271,7 @@ class DCDataCleaner:
             
             logger.debug(f"找到 {len(test_params)} 个测试参数")
 
-            # ASE新版导出将HRDON误标为RDON，需在重复列编号前先恢复语义名。
+            # 日月新新版导出将HRDON误标为RDON，需在重复列编号前先恢复语义名。
             hrdon_alias_columns = self.identify_hrdon_alias_columns(df, test_params)
             
             # 3. 获取第6行的单位信息

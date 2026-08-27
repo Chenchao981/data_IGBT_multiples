@@ -8,14 +8,14 @@
 
 | 封装厂 | 数据格式 | 数据处理 | 状态 |
 |--------|----------|----------|------|
-| **日月新 (ASE)** | .xlsx 分目录 | DC / FT散点图 / DVDS / RG | ✅ 稳定 |
+| **日月新 (Riyuexin)** | .xlsx 分目录 | DC / FT散点图 / DVDS / RG | ✅ 稳定 |
 | **杰群 批次1** | .csv 分目录 | DC / FT散点图 / DVDS / RG | ✅ 稳定 |
 | **杰群 批次2** | .csv 统一CSV | DC+DVDS+RG 合并 / DC散点图 | ✅ 稳定 |
 | **杰群 第三产线** | .csv 产品目录平铺、可变尾空列 | DC / FT散点图 | ✅ 可用 |
 | **杰群清洗** | DC-AI + 专用 DVDS/RG | 自动完整清洗或单独清洗 DVDS/RG / FT散点图 | ✅ 可用 |
 | PAT 参数分析 | 日月新 / 杰群 / 电基原始文件目标目录 | 低内存逐文件统计汇总 | ✅ 可用 |
 | **电基 (Dianji)** | PowerTECH 伪 `.xls` / 原生 `.xlsx` / STS8203 `.csv` / DP1205 TF `.csv` | FT-ALL 自动识别清洗 / FT散点图 | ✅ 可用 |
-| **集佳 (Jijia)** | STS8203 GB18030 `.csv` | FT-ALL 清洗（ASE 风格 `DC_Data`） | ✅ 可用 |
+| **集佳 (Jijia)** | STS8203 GB18030 `.csv` | FT-ALL 清洗（日月新兼容 `DC_Data`） | ✅ 可用 |
 
 ---
 
@@ -61,7 +61,7 @@ data_IGBT_multiple/
 │   └── jijia/                      ← 集佳模块
 │       ├── config.py               ← NCE15TD120BT 严格字段/单位合同
 │       ├── parser.py               ← STS8203 CSV、文件名及元数据校验
-│       └── dc_cleaner.py           ← FT-ALL → ASE 风格 DC_Data
+│       └── dc_cleaner.py           ← FT-ALL → 日月新兼容 DC_Data
 │
 ├── shared/
 │   ├── excel_utils.py              ← Excel/CSV 读写工具（.xls/.xlsx/.csv）
@@ -403,6 +403,7 @@ python gui/main_window.py
 
 ## 🔄 版本历史
 
+- **v2.16.0** (2026-08-27)：为 TMS 正式入库新增日月新、日月光两个独立 FT DC Adapter。日月新兼容已验收的两种文件名方向；日月光严格校验独立的 Time/Unit/Test No. 行布局，并只在临时副本中归一化，原始 XLSX 不改动。移除“日月新 (ASE)”混合业务名称。
 - **v2.15.0** (2026-08-25)：将杰群已验证的“原始目录直读、逐文件提取、分参数临时落盘、精确 PAT”统一到日月新和电基。三家 GUI 的 PAT 均改为选择原始文件目标目录；电基四种已注册源格式全部实测通过，PowerTECH XLSX 14 文件结果与清洗工作簿逐值一致。同步修复日月新 DVDS 不同导出版本中 `Unit`/`Test No.` 行号变化导致的 `DVDS(nan)` 与漏数问题。
 - **v2.14.2** (2026-08-25)：杰群 DVDS/RG 专用按钮增加已清洗输出目录识别。若输入目录中存在唯一且工作表结构正确的 `DVDS_Data` 或 `RG_Data` 工作簿，直接返回该现成结果并明确记录“跳过重复清洗”；多个候选结果仍拒绝处理。修复把 `CJSx185_001` 输出目录误当原始 RG 目录后出现的 `/RG` 不存在报错。
 - **v2.14.1** (2026-08-25)：根据纯 DVDS/RG 专用目录的实际操作场景，恢复杰群 `DVDS`、`RG` 独立按钮；界面精简为 `DC-AI / DVDS / RG`，仍隐藏三个手工 DC 格式按钮。`DC-AI` 继续支持产品根目录一键完整清洗，专用按钮允许直接选择纯 DVDS 或纯 RG 目录。
@@ -481,7 +482,7 @@ python gui/main_window.py
 
 ### 重要说明
 
-> ⚠️ **ASE（日月新）的三个 cleaner 是历史遗留代码，未继承 `BaseCleaner`**。它们直接调用 `shared/excel_utils` 的函数。**杰群批次1的 cleaner 才继承 `BaseCleaner`**。
+> ⚠️ **日月新的三个 cleaner 是历史遗留代码，未继承 `BaseCleaner`**。它们直接调用 `shared/excel_utils` 的函数，并为路径兼容继续使用 `ASEData` 目录名；该目录名不代表日月新与日月光/ASE 是同一家厂商。**杰群批次1的 cleaner 才继承 `BaseCleaner`**。
 >
 > ⚠️ `factories/jiequn/unified_cleaner.py` 是 `clean_unified.py` 的备选实现（带 logger 的版本），目前**未被 GUI 或 CLI 使用**，可视为参考/历史代码。
 
@@ -550,7 +551,7 @@ output/杰群2/mixed_<label>_JQ2_<timestamp>.xlsx  (每种类型一个)
 <输出目录>/PAT_NNN/PAT_NNN.xlsx
 ```
 
-### ASE（日月新）
+### 日月新（Riyuexin；历史目录名 ASEData）
 
 ```
 ASEData/<TYPE>/*.xlsx
@@ -737,7 +738,7 @@ _PARAM_UNITS = {
 Sigma, LCL\n计算值, UCL\n计算值, LCL\n更新前, UCL\n更新前, LCL\n更新后, UCL\n更新后, 是否\n更新
 ```
 
-### `factories/riyuexin/*.py`（ASE 历史遗留）
+### `factories/riyuexin/*.py`（日月新历史模块，沿用 ASEData 目录名）
 
 | 类 | 文件 | 关键方法 | 关键定位 |
 |----|------|----------|----------|
@@ -745,13 +746,13 @@ Sigma, LCL\n计算值, UCL\n计算值, LCL\n更新前, UCL\n更新前, LCL\n更�
 | `DVDSCleaner` | `dvds_cleaner.py` | `extract_dvds_data`, `process_all` | row 1 ("DVDS") + row 6 (单位) + row 18 ("Test No.") |
 | `RGCleaner` | `rg_cleaner.py` | `extract_rg_data`, `run` | row 1 ("RG") + row 6 (R单位) + locate "Test No." |
 
-**ASE DC 参数增强（业务逻辑）：**
+**日月新 DC 参数增强（业务逻辑）：**
 - `IDSS` / `ISGS` 拉取 row 4 → `IDSS40`、`ISGS25` 等。
 - `LRDON` 拉取 row 5 → `LRDON40`。
 - 相邻 `ISGS` 列（相同测试条件 + 相邻列索引）：最左侧重命名为 `IGSS<cond>`。
   - **业务含义**：Jiequn 测试程序有时将 ISGS 列出两次（off-state + on-state at 同一 Vgs），按测试车间惯例 off-state 标为 IGSS。
 
-**ASE RG 健全性过滤：** `0 < RG < 1000`（硬编码，可能误删某些器件家族的合理大值）。
+**日月新 RG 健全性过滤：** `0 < RG < 1000`（硬编码，可能误删某些器件家族的合理大值）。
 
 ### `shared/excel_utils.py`
 
@@ -841,7 +842,7 @@ Sigma, LCL\n计算值, UCL\n计算值, LCL\n更新前, UCL\n更新前, LCL\n更�
 - 据 `PERFORMANCE_OPTIMIZATION_REPORT.md`，DC 968→1916 rows/s（+98%）。
 
 ### 6. Lot-ID 提取
-- **ASE**：`regex [A-Z0-9]{4}-[0-9]{4}`（如 `FA4Z-2484`、`FA53-4115`），fallback stem。
+- **日月新**：`regex [A-Z0-9]{4}-[0-9]{4}`（如 `FA4Z-2484`、`FA53-4115`），fallback stem。
 - **杰群**：`parts[1]` of `stem.split('_')`（依赖 4 段式文件名约定）。
 
 ### 7. 文件大小分流
@@ -851,7 +852,7 @@ Sigma, LCL\n计算值, UCL\n计算值, LCL\n更新前, UCL\n更新前, LCL\n更�
 - `CleanerWorker(QThread)` 后台运行 cleaner，**避免 GUI 长时间阻塞**。
 - 进度/完成/错误信号 → slot 更新状态文本 + QMessageBox 通知。
 
-### 9. ASE DC 相邻 ISGS 启发式
+### 9. 日月新 DC 相邻 ISGS 启发式
 - 相邻两列都是 `ISGS<cond>` 且测试条件相同：左侧列重命名为 `IGSS<cond>`。
 - **业务含义**：Jiequn 测试程序偶有 ISGS 重复（off-state + on-state at 同一 Vgs），车间惯例 off-state 标 IGSS。
 
@@ -881,7 +882,7 @@ Sigma, LCL\n计算值, UCL\n计算值, LCL\n更新前, UCL\n更新前, LCL\n更�
 
 1. `mkdir factories/jcet/`
 2. 创建 `__init__.py`、`config.py`（结构参考 `factories/jiequn/config.py`：FACTORY_NAME、DATA_TYPES、FILE_EXT、INPUT_DIR、OUTPUT_DIR、UNIT_CONVERSIONS）。
-3. 为每种数据类型建 cleaner。**建议继承 `BaseCleaner`**（仅杰群有示例，ASE 是历史遗留）。
+3. 为每种数据类型建 cleaner。**建议继承 `BaseCleaner`**（仅杰群有示例，日月新模块是历史遗留）。
 4. 在 `gui/panels/jcet_panel.py` 子类化 `BasePanel`：
    - 设置 `factory_name`、`data_types`、`default_input`、`default_output`。
    - 实现 `_get_cleaner_fn(data_type)`。
@@ -905,18 +906,18 @@ Sigma, LCL\n计算值, UCL\n计算值, LCL\n更新前, UCL\n更新前, LCL\n更�
 
 1. **两个并行的统一CSV实现**：`clean_unified.py`（GUI/CLI 实际使用）和 `unified_cleaner.py`（带 logger 的备选）。`_apply_conv` 逻辑被重复实现。
 2. **杰群 PAT 目录必须是单一产品、单一参数结构**：混入产品或程序结构会停止；不要选择跨产品总目录。
-3. **ASE DVDS panel 的 monkey-patch**：`DVDSCleaner` 内部用 `base_dir` 派生 `dvds_dir` / `output_dir`，panel 在构造后修改这两个属性。
+3. **日月新 DVDS panel 的 monkey-patch**：`DVDSCleaner` 内部用 `base_dir` 派生 `dvds_dir` / `output_dir`，panel 在构造后修改这两个属性。
 4. **杰群输出列名约定**：内部解析仍会先生成 `周记`，最终输出通过 `formatting.normalize_output_columns()` 改为 `批次`。PAT 已跳过 `批次`，如果新增统计入口也要同步跳过。
-5. **同函数不同入参**：`generate_lot_based_filename` 在 Jiequn 调 `zhouji_list`，ASE 调 `lot_ids`——参数名不同，**只关心值**。
-6. **两处 log 文件位置**：`dc_cleaner.log` 等既在项目根也在 `gui/` 下。ASE cleaner 用 `logging.FileHandler('dc_cleaner.log', mode='w')`（相对 CWD），从 `gui/` 跑就在 `gui/`，从根跑就在根。
+5. **同函数不同入参**：`generate_lot_based_filename` 在 Jiequn 调 `zhouji_list`，日月新调 `lot_ids`——参数名不同，**只关心值**。
+6. **两处 log 文件位置**：`dc_cleaner.log` 等既在项目根也在 `gui/` 下。日月新 cleaner 用 `logging.FileHandler('dc_cleaner.log', mode='w')`（相对 CWD），从 `gui/` 跑就在 `gui/`，从根跑就在根。
 7. **xlsxwriter 硬依赖**：`requirements.txt` 锁定 `xlsxwriter>=3.0.0`，但 fallback 到 openpyxl 仍可工作。
 8. **PAT 临时磁盘空间**：原始大数据运行时会在输出根目录创建 `jiequn_pat_*` 临时参数流，完成或失败后自动清理；磁盘需要容纳有效参数数值。
-9. **ASE RG 健全性过滤**：`0 < RG < 1000` 硬编码，对某些器件家族可能误删。
+9. **日月新 RG 健全性过滤**：`0 < RG < 1000` 硬编码，对某些器件家族可能误删。
 10. **`process_all_dc_files` 返回类型不对称**：返回 `bool` 但 `None` 也视为失败；`RGCleaner.run()` 可返回 `None` 或 path。
 11. **DC-AI 不接受多格式总目录**：若选择目录同时含 DC-1、统一CSV或 DC-3，程序会拒绝；应选择单一格式的下级目录。
 12. **统一CSV自动分发仍要求同一 RAW 目录**：多个子目录中的统一CSV不会被隐式合并，以免跨批次误清洗。
 13. **发布入口**：`packaging/build_secure_pyz.py` 使用 `gui.main_window:main` 并打包 `gui/factories/shared`。
-14. **DVDS 单位读取**：从 row 6 读单位。如果文件是 `V` 而非 `mV`，列名是 `DVDS(V)` 但值**不自动换算**——Jiequn 靠 `BaseCleaner._apply_unit_conversions` 补 V→mV；ASE 直接信任源文件单位。
+14. **DVDS 单位读取**：从 row 6 读单位。如果文件是 `V` 而非 `mV`，列名是 `DVDS(V)` 但值**不自动换算**——Jiequn 靠 `BaseCleaner._apply_unit_conversions` 补 V→mV；日月新直接信任源文件单位。
 15. **Excel 列数从 `Serial` 行推断**：避免首数据行字段少时误判列数。
 16. **性能优化报告**：DC 968→1916 rows/s（+98%），DVDS 8960 rows/s，RG 8494 rows/s（calamine 引擎切换后）。
 17. **大文件写入依赖 xlsxwriter**：`xlsxwriter` 缺失时会回退 `openpyxl`，可成功但 DC 90万行级写入会明显变慢。开发/部署前建议确认 `python -m pip show XlsxWriter`。
@@ -941,9 +942,9 @@ Sigma, LCL\n计算值, UCL\n计算值, LCL\n更新前, UCL\n更新前, LCL\n更�
 | `factories/jiequn/clean_unified.py` | `run(input, output)` | 批次2 统一CSV runner（GUI 使用） |
 | `factories/jiequn/unified_cleaner.py` | `process_unified` | 备选批次2 runner（历史/参考） |
 | `factories/jiequn/pat_cleaner.py` | `build_pat`, `save_pat`, `compute_pat_stats` | PAT 统计聚合 |
-| `factories/riyuexin/dc_cleaner.py` | `DCDataCleaner` | ASE DC cleaner（未继承 BaseCleaner） |
-| `factories/riyuexin/dvds_cleaner.py` | `DVDSCleaner` | ASE DVDS cleaner |
-| `factories/riyuexin/rg_cleaner.py` | `RGCleaner` | ASE RG cleaner |
+| `factories/riyuexin/dc_cleaner.py` | `DCDataCleaner` | 日月新 DC cleaner（未继承 BaseCleaner） |
+| `factories/riyuexin/dvds_cleaner.py` | `DVDSCleaner` | 日月新 DVDS cleaner |
+| `factories/riyuexin/rg_cleaner.py` | `RGCleaner` | 日月新 RG cleaner |
 | `factories/riyuexin/pat_cleaner.py` | `build_pat`, `generate_pat` | 日月新标准 PAT 入口 |
 | `factories/dianji/powertech_parser.py` | `parse_powertech_file` | PowerTECH 文本解析、参数映射与格式校验 |
 | `factories/dianji/sts8203_parser.py` | `parse_sts8203_file` | STS8203 CSV 解析、终测参数映射与格式校验 |

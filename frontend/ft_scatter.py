@@ -46,7 +46,7 @@ def export_scatter_bundle(
     output_dir: Path | str,
     *,
     cleaned_file: Path | str,
-    factory: str = "日月新（ASE）",
+    factory: str = "日月新（Riyuexin）",
     data_type: str = "DC",
     bundle_stem: str = "ft_scatter",
 ) -> Path:

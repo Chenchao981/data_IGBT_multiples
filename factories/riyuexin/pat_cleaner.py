@@ -40,7 +40,7 @@ def _valid_raw_xlsx(path: Path) -> bool:
 
 
 def _classify_flat_file(path: Path) -> str:
-    """Classify an ASE workbook from its parameter header without reading data rows."""
+    """Classify a Riyuexin workbook from its parameter header without reading data rows."""
     try:
         header = pd.read_excel(path, header=None, nrows=7, engine="calamine")
     except Exception:

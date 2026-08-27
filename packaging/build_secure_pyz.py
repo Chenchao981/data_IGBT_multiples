@@ -14,7 +14,7 @@ import glob
 import fnmatch
 from pathlib import Path
 
-VERSION = '2.15.0'
+VERSION = '2.16.0'
 
 # --- Configuration ---
 # Project root
@@ -214,10 +214,11 @@ Run:
 3. Start the application: python ft_data_cleaner.pyz
 
 Features:
-- ASE: DC, FT scatter charts, DVDS, RG, PAT, and SYL&SBL
+- Riyuexin: DC, FT scatter charts, DVDS, RG, PAT, and SYL&SBL
+- TMS adapters: independent, fail-closed Riyuexin and Riyueguang FT DC routes
 - Jiequn: DC-AI, DC-1, DC-unified, DC-3, FT scatter charts, DVDS, RG, PAT, and SYL&SBL
 - Dianji: FT-ALL cleaning, FT scatter charts, PAT, and SYL&SBL
-- Jijia: NCE15TD120BT STS8203 FT-ALL cleaning to ASE-style DC_Data
+- Jijia: NCE15TD120BT STS8203 FT-ALL cleaning to Riyuexin-compatible DC_Data
 
 Notes:
 - Jiequn DC-AI is the recommended default and detects one DC format per selected directory.
@@ -234,11 +235,11 @@ Notes:
 - Dianji STS8203 supports the reviewed NCEAP40T20AGU(M)-7E00 layout, including verified 8/9-digit manufacturing lots, suffix -a, source segment 2, and cross-day tests whose Date matches Ending Time; unreviewed variants are rejected.
 - Jiequn cleaning keeps DC-AI plus standalone DVDS/RG buttons: product roots can run the complete bundle, while pure DVDS/RG directories use their specialized cleaners.
 - Jiequn standalone DVDS/RG safely recognizes one existing valid cleaned workbook and skips duplicate cleaning; ambiguous result directories are rejected.
-- PAT for ASE, Jiequn, and Dianji previews a raw-source directory and calculates directly with bounded memory; no cleaned workbook is required.
-- ASE PAT accepts a product root with DC/DVDS/RG subdirectories or one raw type directory. Dianji PAT accepts one registered raw format directory and rejects mixed formats or products.
+- PAT for Riyuexin, Jiequn, and Dianji previews a raw-source directory and calculates directly with bounded memory; no cleaned workbook is required.
+- Riyuexin PAT accepts a product root with DC/DVDS/RG subdirectories or one raw type directory. Dianji PAT accepts one registered raw format directory and rejects mixed formats or products.
 - SYL&SBL accepts one .xls or .xlsx yield workbook.
 - Output files are saved under the selected output directory.
-- After a supported ASE, Jiequn, or Dianji cleaning operation succeeds, click FT Scatter Chart to open one chart per parameter.
+- After a supported Riyuexin, Jiequn, or Dianji cleaning operation succeeds, click FT Scatter Chart to open one chart per parameter.
 - Scatter limits and bias conditions come from each source file and use the same output-unit conversion as cleaned measurements.
 - Reversed numeric Min/Max values in Jiequn P-type programs are normalized for LSL/USL while retaining the raw cells.
 - Scatter colors and the right-side legend identify lot_ID batches.

@@ -162,7 +162,7 @@ class DVDSCleaner:
                 logging.error(f"在第2行未找到DVDS列: {filename}")
                 return pd.DataFrame()
             
-            # 2. 动态获取DVDS单位。不同 ASE 导出版本的 Unit 行可能在第5或第7行。
+            # 2. 动态获取DVDS单位。不同日月新导出版本的 Unit 行可能在第5或第7行。
             unit_value = None
             for row_idx in range(min(10, len(df))):
                 row_values = {

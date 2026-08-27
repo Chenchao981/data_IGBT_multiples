@@ -28,7 +28,7 @@ from gui.panels.jijia_panel import JijiaPanel
 
 
 FACTORIES = [
-    {"name": "日月新 (ASE)", "panel": RiyuexinPanel, "color": "#BDE7F8", "accent": "#38BDF8"},
+    {"name": "日月新 (Riyuexin)", "panel": RiyuexinPanel, "color": "#BDE7F8", "accent": "#38BDF8"},
     {"name": "杰群 (Jiequn)", "panel": JiequnPanel, "color": "#FFD1DC", "accent": "#FB7185"},
     {"name": "电基 (Dianji)", "panel": DianjiPanel, "color": "#D8F3C9", "accent": "#84CC16"},
     {"name": "集佳 (Jijia)", "panel": JijiaPanel, "color": "#E3D5FF", "accent": "#8B5CF6"},
@@ -173,7 +173,7 @@ class MainWindow(QMainWindow):
 def main():
     app = QApplication(sys.argv)
     app.setApplicationName("FT数据清洗工具")
-    app.setApplicationVersion("2.12.0")
+    app.setApplicationVersion("2.16.0")
 
     app.setStyleSheet("""
         QMainWindow{background:#f7fbfb;}

@@ -4,7 +4,7 @@ echo ========================================
 echo   FT 数据清洗工具 - 多封装厂
 echo ========================================
 echo.
-echo 支持的封装厂: 日月新(ASE) / 杰群(Jiequn)
+echo 支持的封装厂: 日月新(Riyuexin) / 杰群(Jiequn)
 echo.
 python -m gui.main_window
 if %errorlevel% neq 0 (
