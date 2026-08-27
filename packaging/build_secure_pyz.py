@@ -14,7 +14,7 @@ import glob
 import fnmatch
 from pathlib import Path
 
-VERSION = '2.16.0'
+VERSION = '2.17.0'
 
 # --- Configuration ---
 # Project root
@@ -246,6 +246,9 @@ Notes:
 - Scatter charts use a light theme with enlarged markers, axis numbers, titles, legends, and limit labels.
 - Dense repeated in-spec values are compacted for faster opening; every OOS point is retained.
 - Review the application log if processing fails.
+- TMS may supply a manually confirmed Lot only when an approved filename profile
+  is otherwise complete and the Lot field alone is absent. The override never
+  changes source files and cannot replace a conflicting parsed Lot.
 
 Version: {VERSION}
 Author: cc

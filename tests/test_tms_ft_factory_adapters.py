@@ -6,6 +6,7 @@ from pathlib import Path
 import pandas as pd
 
 from factories.tms_adapters.identity import (
+    LotOverrideRequired,
     parse_riyueguang_dc_filename,
     parse_riyuexin_dc_filename,
 )
@@ -40,6 +41,12 @@ def _write_dc_source(path: Path, *, unit_row: int, test_no_row: int, time_row=No
     frame.to_excel(path, sheet_name="Test Data", index=False, header=False)
 
 
+def _remove_measurement_rows(path: Path, *, test_no_row: int) -> None:
+    frame = pd.read_excel(path, sheet_name="Test Data", header=None)
+    frame = frame.iloc[: test_no_row + 1]
+    frame.to_excel(path, sheet_name="Test Data", index=False, header=False)
+
+
 class FtIdentityTest(unittest.TestCase):
     def test_riyuexin_accepts_both_approved_filename_directions(self):
         source_first = parse_riyuexin_dc_filename(
@@ -57,6 +64,27 @@ class FtIdentityTest(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "日月光"):
             parse_riyueguang_dc_filename(
                 "NCEA75ED120BT(LA)-3B00_FA54-9744_NCT6528068_DC_250722070217.xlsx"
+            )
+
+    def test_missing_lot_profile_requires_explicit_override(self):
+        name = "NCT5542087_NCEAP40PT15D(M)-2B00_20251024_182422.xlsx"
+        with self.assertRaises(LotOverrideRequired):
+            parse_riyuexin_dc_filename(name)
+        identity = parse_riyuexin_dc_filename(name, lot_override="fa59-3997")
+        self.assertEqual(identity.lot_id, "FA59-3997")
+        self.assertEqual(identity.layout, "SOURCE_PRODUCT_MANUAL_LOT")
+
+    def test_override_cannot_replace_a_parsed_lot(self):
+        with self.assertRaisesRegex(ValueError, "冲突"):
+            parse_riyueguang_dc_filename(
+                "NCT6528068_NCEA75ED120BT(LA)-3B00_FA54-9744_20250722_070217.xlsx",
+                lot_override="FA54-9999",
+            )
+
+    def test_unknown_filename_is_not_misreported_as_missing_lot(self):
+        with self.assertRaisesRegex(ValueError, "不符合已批准格式"):
+            parse_riyuexin_dc_filename(
+                "vendor_unknown_product_20251024_182422.xlsx"
             )
 
 
@@ -110,6 +138,45 @@ class FtAdapterTest(unittest.TestCase):
             cleaner = RiyueguangTmsDCCleaner(source, root / "output")
             with self.assertRaisesRegex(ValueError, "Unit 行"):
                 cleaner.extract_dc_data(path)
+
+    def test_riyueguang_manual_lot_fills_data_spec_and_manifest_without_raw_change(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            source = root / "input"
+            source.mkdir()
+            name = "NCT6528068_NCEA75ED120BT(LA)-3B00_20250722_070217.xlsx"
+            source_file = source / name
+            _write_dc_source(source_file, unit_row=7, test_no_row=14, time_row=6)
+            original_bytes = source_file.read_bytes()
+            cleaner = RiyueguangTmsDCCleaner(
+                source,
+                root / "output",
+                lot_overrides={name: "FA54-9744"},
+            )
+
+            self.assertTrue(cleaner.process_all_dc_files())
+            self.assertEqual(source_file.read_bytes(), original_bytes)
+            cleaned = pd.read_excel(cleaner.last_output_file, sheet_name="DC_Data")
+            self.assertEqual(set(cleaned["lot_ID"]), {"FA54-9744"})
+            manifest = json.loads(cleaner.last_scatter_manifest.read_text("utf-8"))
+            self.assertEqual(manifest["lots"], ["FA54-9744"])
+            spec = pd.read_csv(cleaner.last_scatter_manifest.parent / "ft_scatter_spec.csv")
+            self.assertEqual(set(spec["lot_ID"]), {"FA54-9744"})
+
+    def test_riyuexin_rejects_partial_success_when_one_registered_file_has_no_data(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            source = root / "input"
+            source.mkdir()
+            good = source / "NCT5542087_NCEAP40PT15D(M)-2B00_FA59-3997_20251024_182422.xlsx"
+            empty = source / "NCT5542088_NCEAP40PT15D(M)-2B00_FA59-3998_20251024_182423.xlsx"
+            _write_dc_source(good, unit_row=6, test_no_row=18)
+            _write_dc_source(empty, unit_row=6, test_no_row=18)
+            _remove_measurement_rows(empty, test_no_row=18)
+
+            cleaner = RiyuexinTmsDCCleaner(source, root / "output")
+            with self.assertRaisesRegex(ValueError, "未完整处理所有登记文件"):
+                cleaner.process_all_dc_files()
 
 
 if __name__ == "__main__":

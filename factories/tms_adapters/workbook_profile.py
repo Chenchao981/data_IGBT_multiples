@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import csv
+import json
 from pathlib import Path
 
 from openpyxl import load_workbook
@@ -65,11 +67,53 @@ def rewrite_manifest_factory(manifest_path: Path | None, *, code: str, name: str
     """Correct the portable bundle identity produced by the mature base Cleaner."""
     if manifest_path is None or not manifest_path.is_file():
         raise ValueError(f"{name} FT DC 未生成散点图清单")
-    import json
-
     payload = json.loads(manifest_path.read_text(encoding="utf-8"))
     payload["factory"] = name
     payload["factory_code"] = code
     manifest_path.write_text(
         json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8"
     )
+
+
+def validate_complete_source_coverage(
+    manifest_path: Path | None,
+    *,
+    expected_sources: set[str],
+    factory_name: str,
+) -> None:
+    """Require every registered XLSX to contribute both data and source-specific Spec."""
+    if manifest_path is None or not manifest_path.is_file():
+        raise ValueError(f"{factory_name} FT DC 未生成散点图清单")
+    payload = json.loads(manifest_path.read_text(encoding="utf-8"))
+    manifest_sources = {
+        str(value).strip()
+        for value in payload.get("sources", [])
+        if str(value).strip()
+    }
+    if manifest_sources != expected_sources:
+        missing = sorted(expected_sources - manifest_sources)
+        extra = sorted(manifest_sources - expected_sources)
+        raise ValueError(
+            f"{factory_name} FT DC 未完整处理所有登记文件: "
+            f"缺少数据来源={missing}, 未登记来源={extra}"
+        )
+
+    spec_path = manifest_path.parent / "ft_scatter_spec.csv"
+    if not spec_path.is_file():
+        raise ValueError(f"{factory_name} FT DC 未生成逐来源Spec")
+    with spec_path.open("r", encoding="utf-8-sig", newline="") as stream:
+        reader = csv.DictReader(stream)
+        if "Source_ID" not in (reader.fieldnames or []):
+            raise ValueError(f"{factory_name} FT DC Spec缺少Source_ID")
+        spec_sources = {
+            str(row.get("Source_ID") or "").strip()
+            for row in reader
+            if str(row.get("Source_ID") or "").strip()
+        }
+    if spec_sources != expected_sources:
+        missing = sorted(expected_sources - spec_sources)
+        extra = sorted(spec_sources - expected_sources)
+        raise ValueError(
+            f"{factory_name} FT DC 未完整生成逐来源Spec: "
+            f"缺少来源={missing}, 未登记来源={extra}"
+        )
