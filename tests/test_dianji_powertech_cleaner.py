@@ -25,6 +25,7 @@ ITEM_NAMES = [
     "IGSS", "IGSS", "IGSS", "IGSS", "RDON", "VFSD", "IDSS", "IGSS",
     "IGSS", "VTH", "DELTA", "DELTA",
 ]
+DJ8_PRODUCT = "NCEAP020N10LL(M)-7E00"
 
 
 def _header_row(label, values):
@@ -161,6 +162,41 @@ def _make_source(
     return path
 
 
+def _make_dj8_source(
+    directory: Path,
+    *,
+    copy_suffix="(1)",
+    data_batch="C207458.07",
+    data_test_tag="DC260716024650",
+    test_product=DJ8_PRODUCT,
+    test_program=None,
+):
+    manufacturing_lot = "M260616003-001"
+    batch = "C207458.07"
+    test_tag = "DC260716024650"
+    legacy = _make_source(
+        directory,
+        manufacturing_lot=manufacturing_lot,
+        batch=batch,
+    )
+    lines = legacy.read_text(encoding="gb18030").splitlines()
+    lines[1] = (
+        "DataFileName:\t\tD:\\DC数据\\"
+        f"{manufacturing_lot} {data_batch} {data_test_tag}.plf"
+    )
+    test_program = test_program or (
+        f"{test_product}_ALL_M08M09_Ver1.07_20260520.ptf"
+    )
+    lines[2] = (
+        "TestFileName:\t\tD:\\PowerTECH\\Programs\\"
+        f"{test_program}"
+    )
+    path = directory / f"{manufacturing_lot} {batch} {test_tag}{copy_suffix}.xls"
+    path.write_text("\r\n".join(lines), encoding="gb18030")
+    legacy.unlink()
+    return path
+
+
 def _to_compact_32_layout(lines):
     """Remove verified SAME Items 17-18 and renumber later test Items."""
     shaped_rows = {
@@ -256,6 +292,38 @@ class DianjiFilenameTests(unittest.TestCase):
 
 
 class PowerTechParserTests(unittest.TestCase):
+    def test_accepts_dj8_metadata_identity_with_optional_copy_suffix(self):
+        for copy_suffix, source_segment in (("", None), ("(1)", "copy-1"), ("(27)", "copy-27")):
+            with self.subTest(copy_suffix=copy_suffix), tempfile.TemporaryDirectory() as temp:
+                parsed = parse_powertech_file(
+                    _make_dj8_source(Path(temp), copy_suffix=copy_suffix)
+                )
+
+            self.assertEqual(parsed.identity.product, DJ8_PRODUCT)
+            self.assertEqual(parsed.identity.manufacturing_lot, "M260616003-001")
+            self.assertEqual(parsed.identity.batch, "C207458.07")
+            self.assertEqual(parsed.identity.test_tag, "DC260716024650")
+            self.assertEqual(parsed.identity.source_segment, source_segment)
+            self.assertEqual(parsed.source_rows, 4)
+            self.assertEqual(parsed.kept_rows, 3)
+
+    def test_rejects_dj8_metadata_identity_conflicts(self):
+        cases = (
+            ({"data_batch": "C207459.07"}, "DataFileName 身份不一致"),
+            ({"data_test_tag": "DC260716024651"}, "DataFileName 身份不一致"),
+            ({"test_product": "UNKNOWN-7E00"}, "TestFileName 产品/程序未经验证"),
+            (
+                {"test_program": f"{DJ8_PRODUCT}_UNREVIEWED.ptf"},
+                "TestFileName 产品/程序未经验证",
+            ),
+            ({"copy_suffix": "(copy)"}, "电基文件名不符合"),
+        )
+        for options, message in cases:
+            with self.subTest(options=options), tempfile.TemporaryDirectory() as temp:
+                source = _make_dj8_source(Path(temp), **options)
+                with self.assertRaisesRegex(DianjiFormatError, message):
+                    parse_powertech_file(source)
+
     def test_matches_reference_columns_and_keeps_partial_rows_after_dvds(self):
         with tempfile.TemporaryDirectory() as temp:
             parsed = parse_powertech_file(_make_source(Path(temp)))

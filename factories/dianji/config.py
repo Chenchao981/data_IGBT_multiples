@@ -37,6 +37,15 @@ POWERTECH_MANUFACTURING_LOT_PATTERN = r"[mMrR]\d{9}-\d{3}(?:-[aA]-[aA])?"
 POWERTECH_BATCH_PATTERN = r"(?:[cC]\d{6}[.,，。]\d{2}|[fF][aA]\d{2}-\d{4})"
 POWERTECH_TEST_TAG_PATTERN = r"(?:(?:[A-Za-z]+)|(?:DC\s+M08))?\d{12}"
 
+# Some reviewed PowerTECH text exports omit the product from the outer .xls
+# filename.  In that naming variant the product must be recovered from the
+# tester-side TestFileName metadata, so keep exact program-to-product evidence
+# instead of accepting an arbitrary program with a familiar product prefix.
+POWERTECH_METADATA_FILENAME_PROGRAMS = {
+    "NCEAP020N10LL(M)-7E00_ALL_M08M09_Ver1.07_20260520.ptf":
+        "NCEAP020N10LL(M)-7E00",
+}
+
 # STS8203 writes a real UTF-8 CSV with metadata before the CSV header.  The
 # source does not expose Bias voltages, so every supported product needs an
 # explicit, reviewed output mapping instead of a guessed generic mapping.

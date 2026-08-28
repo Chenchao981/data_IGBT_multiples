@@ -14,7 +14,7 @@ import glob
 import fnmatch
 from pathlib import Path
 
-VERSION = '2.17.0'
+VERSION = '2.18.0'
 
 # --- Configuration ---
 # Project root
@@ -228,6 +228,7 @@ Notes:
 - Jijia FT-ALL strictly supports the reviewed NCE15TD120BT GB18030 STS8203 123-column layout. It writes NUM + lot_ID + 117 unit-qualified parameters to DC_Data, excludes PASSFG/SOFT_BIN, and retains both PASS and FAIL records.
 - Dianji batch IDs accept the verified C203133.03 week-code and FA65-5405 formats, with strict filename/Lot identity checks.
 - Dianji PowerTECH also accepts the reviewed dj6 no-space lot/batch form, -A-A lot suffix, DC M08 test tag, and compact 32-Item program; unknown variants remain rejected.
+- Dianji PowerTECH dj8 accepts the reviewed product-less outer filename and optional numeric copy suffix only when DataFileName, the exact approved TestFileName program, and Lot metadata prove one consistent identity.
 - Dianji PowerTECH XLSX strictly supports the reviewed NCE40ED120VT(LA) dj7 34/35/38/39-Item layouts and restores one 21-parameter RAW contract; unknown products, layouts, units, Bias conditions, or identities are rejected.
 - Dianji TF CSV strictly supports the reviewed NCE40ED120VT(LA) DP1205 SW+Trr 57-column/50-Item layout and writes NUM + batch + 47 unit-qualified parameters; '/' is treated as missing and Udc(V) is the retention gate.
 - Dianji FT-ALL stores each run in a numbered product-family folder such as NCEAP016N85LL(M)_001.

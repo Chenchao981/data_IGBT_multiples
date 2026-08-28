@@ -9,7 +9,7 @@ from collections import Counter
 from dataclasses import dataclass
 import math
 import re
-from pathlib import Path
+from pathlib import Path, PureWindowsPath
 import pandas as pd
 
 from factories.dianji.config import (
@@ -18,6 +18,7 @@ from factories.dianji.config import (
     POWERTECH_BATCH_PATTERN,
     POWERTECH_ITEM_LAYOUTS,
     POWERTECH_MANUFACTURING_LOT_PATTERN,
+    POWERTECH_METADATA_FILENAME_PROGRAMS,
     POWERTECH_TEST_TAG_PATTERN,
     PowerTechItemLayout,
     SOURCE_ENCODINGS,
@@ -72,6 +73,19 @@ _LOT_RE = re.compile(
     rf"(?P<batch>{POWERTECH_BATCH_PATTERN})",
     flags=re.IGNORECASE,
 )
+_METADATA_FILENAME_RE = re.compile(
+    rf"^(?P<manufacturing_lot>{POWERTECH_MANUFACTURING_LOT_PATTERN})\s*"
+    rf"(?P<batch>{POWERTECH_BATCH_PATTERN})\s*"
+    rf"(?P<test_tag>{POWERTECH_TEST_TAG_PATTERN})"
+    r"(?:\((?P<copy_number>[1-9]\d*)\))?$",
+    flags=re.IGNORECASE,
+)
+_METADATA_DATA_FILENAME_RE = re.compile(
+    rf"^(?P<manufacturing_lot>{POWERTECH_MANUFACTURING_LOT_PATTERN})\s*"
+    rf"(?P<batch>{POWERTECH_BATCH_PATTERN})\s*"
+    rf"(?P<test_tag>{POWERTECH_TEST_TAG_PATTERN})\.plf$",
+    flags=re.IGNORECASE,
+)
 _ITEM_RE = re.compile(r"^(?P<number>\d+)\s+(?P<name>.+?)\s*$")
 
 
@@ -105,13 +119,13 @@ def is_powertech_text_file(path: str | Path) -> bool:
 
 def parse_powertech_file(path: str | Path) -> ParsedPowerTechFile:
     path = Path(path)
-    identity = parse_dianji_filename(path.name)
     text, _encoding = _read_source_text(path)
     rows = [[field.strip() for field in line.split("\t")] for line in text.splitlines()]
     if not rows or not rows[0] or rows[0][0] != SOURCE_SIGNATURE:
         raise DianjiFormatError(f"不是 PowerTECH 文本导出文件: {path.name}")
 
     labels = _locate_header_rows(rows, path)
+    identity = _resolve_file_identity(rows, labels["Serial#"], path)
     metadata_lot, lot_identity_warning = _validate_metadata_lot(
         rows, labels["Serial#"], identity, path
     )
@@ -148,6 +162,90 @@ def parse_powertech_file(path: str | Path) -> ParsedPowerTechFile:
         kept_rows=len(data),
         invalid_marker_counts=dict(invalid_counts),
     )
+
+
+def _resolve_file_identity(
+    rows: list[list[str]], serial_index: int, path: Path
+) -> FileIdentity:
+    """Use the legacy filename contract or the strictly verified dj8 fallback."""
+    try:
+        return parse_dianji_filename(path.name)
+    except DianjiFormatError:
+        if _METADATA_FILENAME_RE.fullmatch(path.stem) is None:
+            raise
+    return _parse_metadata_filename_identity(rows, serial_index, path)
+
+
+def _parse_metadata_filename_identity(
+    rows: list[list[str]], serial_index: int, path: Path
+) -> FileIdentity:
+    """Resolve a product-less filename only when tester metadata proves it."""
+    source_match = _METADATA_FILENAME_RE.fullmatch(path.stem)
+    if source_match is None:
+        raise DianjiFormatError(f"电基 dj8 文件名未经验证: {path.name}")
+
+    data_file = _metadata_value(rows, serial_index, "DataFileName", path)
+    data_name = PureWindowsPath(data_file).name
+    data_match = _METADATA_DATA_FILENAME_RE.fullmatch(data_name)
+    if data_match is None:
+        raise DianjiFormatError(
+            f"{path.name} 的 DataFileName 未经验证: {data_name}"
+        )
+
+    source_identity = (
+        source_match.group("manufacturing_lot").upper(),
+        _normalize_batch(source_match.group("batch")),
+        _normalize_test_tag(source_match.group("test_tag")),
+    )
+    data_identity = (
+        data_match.group("manufacturing_lot").upper(),
+        _normalize_batch(data_match.group("batch")),
+        _normalize_test_tag(data_match.group("test_tag")),
+    )
+    if source_identity != data_identity:
+        raise DianjiFormatError(
+            f"{path.name} 的文件名与 DataFileName 身份不一致: "
+            f"filename={source_identity}, DataFileName={data_identity}"
+        )
+
+    test_file = _metadata_value(rows, serial_index, "TestFileName", path)
+    test_name = PureWindowsPath(test_file).name
+    products = [
+        product
+        for program, product in POWERTECH_METADATA_FILENAME_PROGRAMS.items()
+        if test_name.casefold() == program.casefold()
+    ]
+    if len(products) != 1:
+        raise DianjiFormatError(
+            f"{path.name} 的 TestFileName 产品/程序未经验证: {test_name}"
+        )
+
+    copy_number = source_match.group("copy_number")
+    return FileIdentity(
+        product=products[0],
+        manufacturing_lot=source_identity[0],
+        batch=source_identity[1],
+        test_tag=source_identity[2],
+        source_segment=f"copy-{copy_number}" if copy_number else None,
+    )
+
+
+def _metadata_value(
+    rows: list[list[str]], serial_index: int, label: str, path: Path
+) -> str:
+    expected = label.casefold()
+    for row in rows[:serial_index]:
+        if not row or row[0].rstrip(":").strip().casefold() != expected:
+            continue
+        value = " ".join(field for field in row[1:] if field).strip()
+        if value:
+            return value
+        break
+    raise DianjiFormatError(f"{path.name} 缺少 {label} 元数据")
+
+
+def _normalize_test_tag(value: str) -> str:
+    return re.sub(r"\s+", " ", value).strip().upper()
 
 
 def _read_source_text(path: Path) -> tuple[str, str]:
