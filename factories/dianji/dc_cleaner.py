@@ -27,12 +27,74 @@ from factories.dianji.source_registry import (
     parse_dianji_source_file,
 )
 from shared.excel_utils import create_output_run_dir, write_excel_fast
+from shared.pat_engine import extract_parameter_schema, merge_parameter_schemas
 
 
 logger = logging.getLogger(__name__)
 
 
 _PACKAGE_CODE_SUFFIX_RE = re.compile(r"-\d[A-Z]\d{2}$", re.IGNORECASE)
+_POWERTECH_SOURCE_FORMATS = frozenset({"PowerTECH", "PowerTECH XLSX"})
+_OUTPUT_IDENTIFIER_COLUMNS = frozenset({"批次"})
+
+
+def _parsed_parameter_keys(parsed) -> object | None:
+    """Read the optional semantic schema exposed by a newer parser."""
+
+    for name in ("parameter_keys", "parameter_schema"):
+        value = getattr(parsed, name, None)
+        if value is not None:
+            return value
+    for name in ("parameter_keys", "parameter_schema"):
+        value = parsed.data.attrs.get(name)
+        if value is not None:
+            return value
+    return None
+
+
+def _frame_with_parameter_keys(parsed) -> pd.DataFrame:
+    """Return a shallow frame copy carrying parser semantic keys when present."""
+
+    frame = parsed.data.copy(deep=False)
+    parameter_keys = _parsed_parameter_keys(parsed)
+    if parameter_keys is not None:
+        frame.attrs["parameter_keys"] = parameter_keys
+    return frame
+
+
+def _resolve_output_parameter_schema(
+    parsed_files: list[object], source_format: str
+) -> tuple[str, ...]:
+    """Resolve one exact or strictly right-appended output schema."""
+
+    mode = (
+        "nested_prefix"
+        if source_format in _POWERTECH_SOURCE_FORMATS
+        else "exact"
+    )
+    canonical_columns: tuple[str, ...] | None = None
+    canonical_keys: tuple[object, ...] | None = None
+    for parsed in parsed_files:
+        frame = _frame_with_parameter_keys(parsed)
+        try:
+            columns, keys = extract_parameter_schema(
+                frame, identifier_columns=_OUTPUT_IDENTIFIER_COLUMNS
+            )
+            canonical_columns, canonical_keys, _added = merge_parameter_schemas(
+                canonical_columns,
+                canonical_keys,
+                columns,
+                keys,
+                mode=mode,
+                context=parsed.path.name,
+            )
+        except ValueError as exc:
+            raise DianjiFormatError(
+                f"电基文件输出参数不兼容，拒绝错列合并: {exc}"
+            ) from exc
+    if not canonical_columns:
+        raise DianjiFormatError("电基文件没有可输出的测试参数")
+    return canonical_columns
 
 
 class DianjiDCCleaner(BaseCleaner):
@@ -114,16 +176,16 @@ class DianjiDCCleaner(BaseCleaner):
                 "一次只能合并一个产品，当前目录包含: " + ", ".join(sorted(products))
             )
 
-        schemas = {tuple(parsed.data.columns) for parsed in parsed_files}
-        if len(schemas) != 1:
-            details = " | ".join(
-                f"{parsed.path.name}: {list(parsed.data.columns)}" for parsed in parsed_files
-            )
-            raise DianjiFormatError(f"电基文件输出参数不一致，拒绝错列合并: {details}")
+        source_format = next(iter(source_formats))
+        parameter_columns = _resolve_output_parameter_schema(
+            parsed_files, source_format
+        )
 
         source_frames = []
         for parsed in parsed_files:
-            frame = parsed.data.copy()
+            frame = parsed.data.reindex(
+                columns=["批次", *parameter_columns]
+            ).copy()
             frame["_source_id"] = parsed.path.stem
             source_frames.append(frame)
         merged = pd.concat(source_frames, ignore_index=True, sort=False)

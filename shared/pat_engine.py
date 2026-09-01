@@ -8,10 +8,11 @@ from __future__ import annotations
 import gc
 import hashlib
 from collections import defaultdict
+from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from pathlib import Path
 from tempfile import TemporaryDirectory
-from typing import Callable, Iterable
+from typing import Callable, Iterable, Literal
 
 import numpy as np
 import pandas as pd
@@ -31,11 +32,112 @@ DEFAULT_IDENTIFIER_COLUMNS = frozenset({"NUM", "lot_ID", "周记", "批次"})
 
 @dataclass(frozen=True)
 class RawPatGroup:
-    """Files sharing one parser and one exact ordered parameter schema."""
+    """Files sharing one parser and one ordered parameter-schema policy."""
 
     label: str
     files: tuple[Path, ...]
     extractor: Callable[[Path], pd.DataFrame]
+    schema_mode: Literal["exact", "nested_prefix"] = "exact"
+
+
+def extract_parameter_schema(
+    frame: pd.DataFrame,
+    *,
+    identifier_columns: Iterable[str] = DEFAULT_IDENTIFIER_COLUMNS,
+) -> tuple[tuple[str, ...], tuple[object, ...]]:
+    """Return display columns and optional parser-provided semantic keys.
+
+    Parsers may attach ``parameter_keys`` (or the compatibility alias
+    ``parameter_schema``) to ``DataFrame.attrs``. A sequence must align with
+    the non-identifier columns. A mapping may use output column names as keys.
+    Older parsers need no change: their output names remain the schema identity
+    fallback.
+    """
+
+    excluded = {str(column) for column in identifier_columns}
+    columns = tuple(
+        str(column) for column in frame.columns if str(column) not in excluded
+    )
+    if len(columns) != len(set(columns)):
+        raise ValueError(f"参数输出列重名，无法安全统计: {list(columns)}")
+
+    raw_keys = frame.attrs.get("parameter_keys")
+    if raw_keys is None:
+        raw_keys = frame.attrs.get("parameter_schema")
+    if raw_keys is None:
+        return columns, tuple(columns)
+
+    if isinstance(raw_keys, Mapping):
+        missing = [column for column in columns if column not in raw_keys]
+        if missing:
+            raise ValueError(f"参数语义 Key 缺少输出列: {missing}")
+        keys = tuple(raw_keys[column] for column in columns)
+    elif isinstance(raw_keys, Sequence) and not isinstance(
+        raw_keys, (str, bytes, bytearray)
+    ):
+        keys = tuple(raw_keys)
+    else:
+        raise ValueError("parameter_keys 必须是按参数列对齐的序列或列名映射")
+
+    if len(keys) != len(columns):
+        raise ValueError(
+            "参数语义 Key 数量与输出参数列不一致: "
+            f"keys={len(keys)}, columns={len(columns)}"
+        )
+    return columns, keys
+
+
+def merge_parameter_schemas(
+    current_columns: tuple[str, ...] | None,
+    current_keys: tuple[object, ...] | None,
+    incoming_columns: tuple[str, ...],
+    incoming_keys: tuple[object, ...],
+    *,
+    mode: Literal["exact", "nested_prefix"],
+    context: str,
+) -> tuple[tuple[str, ...], tuple[object, ...], tuple[str, ...]]:
+    """Merge one exact or strictly right-appended parameter schema.
+
+    ``nested_prefix`` is deliberately narrower than a general union. It only
+    accepts a shorter semantic schema that is the prefix of the longer one.
+    Display names must share the same prefix too, so a semantic conflict cannot
+    be hidden behind an equal-length workbook merge.
+    """
+
+    if mode not in {"exact", "nested_prefix"}:
+        raise ValueError(f"未知 PAT 参数结构模式: {mode}")
+    if current_columns is None or current_keys is None:
+        return incoming_columns, incoming_keys, incoming_columns
+
+    if mode == "exact":
+        if incoming_keys != current_keys or incoming_columns != current_columns:
+            raise ValueError(
+                f"参数结构不一致: {context}; "
+                f"期望 {list(current_columns)}; 实际 {list(incoming_columns)}"
+            )
+        return current_columns, current_keys, ()
+
+    incoming_is_prefix = (
+        len(incoming_keys) <= len(current_keys)
+        and incoming_keys == current_keys[: len(incoming_keys)]
+        and incoming_columns == current_columns[: len(incoming_columns)]
+    )
+    if incoming_is_prefix:
+        return current_columns, current_keys, ()
+
+    current_is_prefix = (
+        len(current_keys) < len(incoming_keys)
+        and current_keys == incoming_keys[: len(current_keys)]
+        and current_columns == incoming_columns[: len(current_columns)]
+    )
+    if current_is_prefix:
+        added = incoming_columns[len(current_columns) :]
+        return incoming_columns, incoming_keys, added
+
+    raise ValueError(
+        f"参数结构不是严格的右侧追加兼容关系: {context}; "
+        f"基准列={list(current_columns)}; 当前列={list(incoming_columns)}"
+    )
 
 
 def compute_pat_stats(
@@ -103,7 +205,6 @@ def build_spooled_raw_pat(
     if not groups or total_files == 0:
         raise ValueError(f"{factory_label} PAT 原始目录没有可处理的源文件")
 
-    excluded = {str(column) for column in identifier_columns}
     spool_parent = Path(spool_dir).expanduser().resolve() if spool_dir else None
     if spool_parent is not None:
         spool_parent.mkdir(parents=True, exist_ok=True)
@@ -123,32 +224,36 @@ def build_spooled_raw_pat(
         handles: dict[str, object] = {}
         try:
             for group in groups:
-                expected_columns: list[str] | None = None
+                expected_columns: tuple[str, ...] | None = None
+                expected_keys: tuple[object, ...] | None = None
                 for file_path in group.files:
                     frame = group.extractor(file_path)
                     if frame is None or frame.empty:
                         raise ValueError(f"PAT 文件未解析出目标参数: {file_path}")
-                    value_columns = [
-                        str(column)
-                        for column in frame.columns
-                        if str(column) not in excluded
-                    ]
+                    value_columns, parameter_keys = extract_parameter_schema(
+                        frame, identifier_columns=identifier_columns
+                    )
                     if not value_columns:
                         raise ValueError(f"PAT 文件没有数值参数: {file_path}")
-                    if expected_columns is None:
-                        expected_columns = value_columns
-                        duplicates = set(value_columns) & set(ordered_columns)
+                    previous_columns = expected_columns
+                    expected_columns, expected_keys, added_columns = (
+                        merge_parameter_schemas(
+                            expected_columns,
+                            expected_keys,
+                            value_columns,
+                            parameter_keys,
+                            mode=group.schema_mode,
+                            context=file_path.name,
+                        )
+                    )
+                    if previous_columns is None or added_columns:
+                        duplicates = set(added_columns) & set(ordered_columns)
                         if duplicates:
                             raise ValueError(
                                 f"PAT 分组存在重复参数 {sorted(duplicates)}，"
                                 "为避免重复计数已停止"
                             )
-                        ordered_columns.extend(value_columns)
-                    elif value_columns != expected_columns:
-                        raise ValueError(
-                            f"PAT 参数结构不一致: {file_path.name}; "
-                            f"期望 {expected_columns}; 实际 {value_columns}"
-                        )
+                        ordered_columns.extend(added_columns)
 
                     parsed_rows += len(frame)
                     for column in value_columns:

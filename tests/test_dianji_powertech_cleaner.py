@@ -57,6 +57,7 @@ def _make_source(
     bias2 = [""] * 34
     bias3 = [""] * 34
     bias1[13] = "ID=250.0uA"  # item 14: skipped placeholder VTH
+    bias1[14] = "M#=14"
     bias1[15] = "ID=250.0uA"
     bias1[18] = "ID=1.000mA"
     bias1[19] = "ID=250.0uA"
@@ -273,6 +274,18 @@ class DianjiFilenameTests(unittest.TestCase):
                 self.assertEqual(identity.batch, batch)
                 self.assertEqual(identity.test_tag, test_tag)
 
+    def test_accepts_dj1_e_batch_and_copy_suffix(self):
+        identity = parse_dianji_filename(
+            "NCEP039N10M-M_M250528015-023 E002413.00 "
+            "ALL250609023222(1).xls"
+        )
+
+        self.assertEqual(identity.product, "NCEP039N10M-M")
+        self.assertEqual(identity.manufacturing_lot, "M250528015-023")
+        self.assertEqual(identity.batch, "E002413.00")
+        self.assertEqual(identity.test_tag, "ALL250609023222")
+        self.assertEqual(identity.source_segment, "copy-1")
+
     def test_rejects_unverified_batch_pattern(self):
         with self.assertRaisesRegex(DianjiFormatError, "电基文件名不符合"):
             parse_dianji_filename(
@@ -307,6 +320,25 @@ class PowerTechParserTests(unittest.TestCase):
             self.assertEqual(parsed.source_rows, 4)
             self.assertEqual(parsed.kept_rows, 3)
 
+    def test_accepts_verified_m08m15_metadata_program(self):
+        program = f"{DJ8_PRODUCT}_ALL_M08M15_Ver1.07_20260520.ptf"
+        with tempfile.TemporaryDirectory() as temp:
+            parsed = parse_powertech_file(
+                _make_dj8_source(
+                    Path(temp),
+                    copy_suffix="",
+                    test_program=program,
+                )
+            )
+
+        self.assertEqual(parsed.identity.product, DJ8_PRODUCT)
+        self.assertEqual(parsed.identity.manufacturing_lot, "M260616003-001")
+        self.assertEqual(parsed.identity.batch, "C207458.07")
+        self.assertEqual(parsed.identity.test_tag, "DC260716024650")
+        self.assertIsNone(parsed.identity.source_segment)
+        self.assertEqual(parsed.source_rows, 4)
+        self.assertEqual(parsed.kept_rows, 3)
+
     def test_rejects_dj8_metadata_identity_conflicts(self):
         cases = (
             ({"data_batch": "C207459.07"}, "DataFileName 身份不一致"),
@@ -314,6 +346,13 @@ class PowerTechParserTests(unittest.TestCase):
             ({"test_product": "UNKNOWN-7E00"}, "TestFileName 产品/程序未经验证"),
             (
                 {"test_program": f"{DJ8_PRODUCT}_UNREVIEWED.ptf"},
+                "TestFileName 产品/程序未经验证",
+            ),
+            (
+                {
+                    "test_program":
+                        f"{DJ8_PRODUCT}_ALL_M08M16_Ver1.07_20260520.ptf"
+                },
                 "TestFileName 产品/程序未经验证",
             ),
             ({"copy_suffix": "(copy)"}, "电基文件名不符合"),
@@ -396,6 +435,26 @@ class PowerTechParserTests(unittest.TestCase):
         self.assertEqual(parsed.data.loc[0, "IDSS90(nA)"], 11.819)
         self.assertEqual(parsed.data.loc[0, "DELTA BV"], 0.0152)
         self.assertEqual(parsed.data.loc[0, "DELTA VTH"], 0.1481)
+
+    def test_standard_34_and_compact_32_share_semantic_parameter_keys(self):
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            standard_dir = root / "standard"
+            compact_dir = root / "compact"
+            standard_dir.mkdir()
+            compact_dir.mkdir()
+            standard = parse_powertech_file(_make_source(standard_dir))
+            compact = parse_powertech_file(
+                _make_source(compact_dir, compact_layout=True)
+            )
+
+        self.assertEqual(standard.parameter_keys, compact.parameter_keys)
+        self.assertEqual(
+            standard.data.attrs["parameter_keys"], standard.parameter_keys
+        )
+        self.assertEqual(
+            compact.data.attrs["parameter_keys"], compact.parameter_keys
+        )
 
     def test_accepts_verified_a_a_lot_suffix_in_filename_and_metadata(self):
         with tempfile.TemporaryDirectory() as temp:
@@ -483,7 +542,7 @@ class PowerTechParserTests(unittest.TestCase):
             changed = ITEM_NAMES.copy()
             changed[15] = "BVDSS"  # item 16 must be VTH
             path = _make_source(Path(temp), item_names=changed)
-            with self.assertRaisesRegex(DianjiFormatError, "Item #16"):
+            with self.assertRaisesRegex(DianjiFormatError, "DELTA Item #34"):
                 parse_powertech_file(path)
 
     def test_rejects_real_binary_xls(self):

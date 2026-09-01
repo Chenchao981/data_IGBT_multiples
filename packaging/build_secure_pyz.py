@@ -14,7 +14,7 @@ import glob
 import fnmatch
 from pathlib import Path
 
-VERSION = '2.18.0'
+VERSION = '2.19.0'
 
 # --- Configuration ---
 # Project root
@@ -226,13 +226,13 @@ Notes:
 - For Jiequn DC-3, select the third-line DC1 root or a product directory.
 - Dianji FT-ALL uses a format registry to detect verified PowerTECH .xls text, PowerTECH .xlsx Datalog, STS8203 .csv, and DP1205 SW+Trr TF .csv sources, then dispatches to the matching parser module.
 - Jijia FT-ALL strictly supports the reviewed NCE15TD120BT GB18030 STS8203 123-column layout. It writes NUM + lot_ID + 117 unit-qualified parameters to DC_Data, excludes PASSFG/SOFT_BIN, and retains both PASS and FAIL records.
-- Dianji batch IDs accept the verified C203133.03 week-code and FA65-5405 formats, with strict filename/Lot identity checks.
-- Dianji PowerTECH also accepts the reviewed dj6 no-space lot/batch form, -A-A lot suffix, DC M08 test tag, and compact 32-Item program; unknown variants remain rejected.
+- Dianji batch IDs accept the verified C203133.03, E002413.00, and FA65-5405 forms, with strict filename/Lot identity checks.
+- Dianji PowerTECH also accepts the reviewed dj6 no-space lot/batch form, -A-A lot suffix, DC M08 test tag, and compact 32-Item program; Item/Bias/Unit rows now drive dynamic business-parameter discovery, while identity and semantic conflicts remain rejected.
 - Dianji PowerTECH dj8 accepts the reviewed product-less outer filename and optional numeric copy suffix only when DataFileName, the exact approved TestFileName program, and Lot metadata prove one consistent identity.
-- Dianji PowerTECH XLSX strictly supports the reviewed NCE40ED120VT(LA) dj7 34/35/38/39-Item layouts and restores one 21-parameter RAW contract; unknown products, layouts, units, Bias conditions, or identities are rejected.
+- Dianji PowerTECH XLSX keeps the reviewed NCE40ED120VT(LA) identity contract and legacy 21-parameter order, while dynamically appending future right-side business Items; unknown products, units, conflicting Bias conditions, or identities are rejected.
 - Dianji TF CSV strictly supports the reviewed NCE40ED120VT(LA) DP1205 SW+Trr 57-column/50-Item layout and writes NUM + batch + 47 unit-qualified parameters; '/' is treated as missing and Udc(V) is the retention gate.
 - Dianji FT-ALL stores each run in a numbered product-family folder such as NCEAP016N85LL(M)_001.
-- Dianji restores one stable RAW order across both standard Item 29-31 permutations and the reviewed compact 32-Item mapping.
+- Dianji restores the stable legacy RAW order across reviewed permutations, excludes CONT*/SAME/DELAY control Items, and appends compatible right-side business parameters for RAW, scatter, and PAT.
 - Dianji STS8203 supports the reviewed NCEAP40T20AGU(M)-7E00 layout, including verified 8/9-digit manufacturing lots, suffix -a, source segment 2, and cross-day tests whose Date matches Ending Time; unreviewed variants are rejected.
 - Jiequn cleaning keeps DC-AI plus standalone DVDS/RG buttons: product roots can run the complete bundle, while pure DVDS/RG directories use their specialized cleaners.
 - Jiequn standalone DVDS/RG safely recognizes one existing valid cleaned workbook and skips duplicate cleaning; ambiguous result directories are rejected.

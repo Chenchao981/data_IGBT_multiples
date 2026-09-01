@@ -86,6 +86,11 @@ def _make_source(
         source_name = changed_item[1] if changed_item and changed_item[0] == item_number else item_name
         sheet.cell(8, item_number + 3, f"{item_number} {source_name}")
 
+    # Item 11 is the tester's VTH screening helper; Item 12 SAME explicitly
+    # points back to it.  Dynamic parsing uses this relationship rather than a
+    # fixed Item number to exclude only the screening VTH.
+    sheet.cell(9, 12 + 3, "M#=11")
+
     for field in layout.output_fields:
         column = field.item_no + 3
         unit = changed_unit[1] if changed_unit and changed_unit[0] == field.item_no else field.unit
@@ -148,6 +153,7 @@ class PowerTechXlsxParserTests(unittest.TestCase):
             "ICES1200-1(nA)", "ICES1250(nA)", "ICES1200-2(nA)",
             "IGSS30-2(nA)", "ISGS30-2(nA)", "DELTA BV", "DELTA VTH",
         ]
+        parameter_keys = []
         with tempfile.TemporaryDirectory() as temp:
             root = Path(temp)
             for index, layout in enumerate(POWERTECH_XLSX_LAYOUTS):
@@ -165,6 +171,13 @@ class PowerTechXlsxParserTests(unittest.TestCase):
                 self.assertEqual(parsed.invalid_marker_counts["DVCE(mV)"], 1)
                 self.assertEqual(parsed.invalid_marker_counts["ICES1000(nA)"], 1)
                 self.assertEqual(len(parsed.specs), 21)
+                self.assertEqual(
+                    parsed.data.attrs["parameter_keys"], parsed.parameter_keys
+                )
+                parameter_keys.append(parsed.parameter_keys)
+        self.assertTrue(
+            all(keys == parameter_keys[0] for keys in parameter_keys[1:])
+        )
 
     def test_detects_xlsx_signature_and_registry_handler(self):
         with tempfile.TemporaryDirectory() as temp:

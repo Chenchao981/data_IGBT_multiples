@@ -18,6 +18,21 @@ from shared.pat_engine import RawPatGroup, build_spooled_raw_pat
 
 RAW_DATA_LABELS = ("RAW",)
 RAW_DATA_SHEET_PATTERN = re.compile(r"^(RAW)(?:_(\d+))?$", re.IGNORECASE)
+_POWERTECH_SOURCE_FORMATS = frozenset({"PowerTECH", "PowerTECH XLSX"})
+
+
+def _parsed_parameter_keys(parsed) -> object | None:
+    """Read an optional semantic parameter schema from a parser result."""
+
+    for name in ("parameter_keys", "parameter_schema"):
+        value = getattr(parsed, name, None)
+        if value is not None:
+            return value
+    for name in ("parameter_keys", "parameter_schema"):
+        value = parsed.data.attrs.get(name)
+        if value is not None:
+            return value
+    return None
 
 
 def _scan_raw_files(source_dir: str | Path) -> tuple[Path, ...]:
@@ -75,9 +90,18 @@ def build_raw_pat(
 ) -> pd.DataFrame:
     """逐个解析电基原始文件，以杰群低内存算法计算精确 PAT。"""
     from factories.dianji.models import DianjiFormatError
-    from factories.dianji.source_registry import parse_dianji_source_file
+    from factories.dianji.source_registry import (
+        detect_dianji_source_format,
+        parse_dianji_source_file,
+    )
 
     files = _scan_raw_files(source_dir)
+    source_format = detect_dianji_source_format(files[0]).display_name
+    schema_mode = (
+        "nested_prefix"
+        if source_format in _POWERTECH_SOURCE_FORMATS
+        else "exact"
+    )
     products: set[str] = set()
     formats: set[str] = set()
 
@@ -97,10 +121,14 @@ def build_raw_pat(
             )
         if parsed.lot_identity_warning:
             print(f"WARNING: {parsed.lot_identity_warning}")
-        return parsed.data
+        frame = parsed.data.copy(deep=False)
+        parameter_keys = _parsed_parameter_keys(parsed)
+        if parameter_keys is not None:
+            frame.attrs["parameter_keys"] = parameter_keys
+        return frame
 
     return build_spooled_raw_pat(
-        (RawPatGroup("FT-ALL", files, extract),),
+        (RawPatGroup("FT-ALL", files, extract, schema_mode=schema_mode),),
         spool_dir=spool_dir,
         progress_interval=progress_interval,
         factory_label="电基",

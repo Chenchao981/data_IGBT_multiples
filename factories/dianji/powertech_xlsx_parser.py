@@ -24,6 +24,11 @@ from factories.dianji.config import (
     POWERTECH_XLSX_TRAILING_LOT_LABELS,
 )
 from factories.dianji.models import DianjiFormatError, FileIdentity
+from factories.dianji.powertech_items import (
+    PlannedPowerTechColumn,
+    PowerTechItem,
+    plan_powertech_xlsx_columns,
+)
 
 
 @dataclass(frozen=True)
@@ -54,6 +59,7 @@ class ParsedPowerTechXlsxFile:
     source_rows: int
     kept_rows: int
     invalid_marker_counts: dict[str, int]
+    parameter_keys: tuple[tuple[str, ...], ...] = ()
     source_format: str = "PowerTECH XLSX"
 
 
@@ -242,11 +248,13 @@ def parse_powertech_xlsx_file(path: str | Path) -> ParsedPowerTechXlsxFile:
     frame = _read_workbook(path)
     rows = _header_rows(frame)
     _validate_header_labels(rows, path)
-    layout = _detect_layout(rows["Item Name"], path)
+    items = _build_items(rows, path)
+    layout = _detect_layout(items, path)
     _validate_filename_layout(path, layout)
     metadata_lot = _validate_metadata(frame, identity, path)
     _validate_output_fields(rows, layout, path)
-    specs = _build_specs(rows, layout, identity, path)
+    output_columns = plan_powertech_xlsx_columns(items, path)
+    specs = _build_specs(rows, output_columns, identity, path)
 
     source = frame.iloc[18:].copy()
     serial_text = source.iloc[:, 0].astype("string").str.strip()
@@ -259,15 +267,17 @@ def parse_powertech_xlsx_file(path: str | Path) -> ParsedPowerTechXlsxFile:
 
     records = pd.DataFrame(index=source.index)
     invalid_counts: Counter[str] = Counter()
-    for field in layout.output_fields:
-        raw_values = source.iloc[:, field.item_no + 2]
-        records[field.output_name] = _parse_measurement_series(
-            raw_values, field.output_name, invalid_counts, path
+    for column in output_columns:
+        raw_values = source.iloc[:, column.item.field_index]
+        records[column.name] = _parse_measurement_series(
+            raw_values, column.name, column.factor, invalid_counts, path
         )
     source_rows = len(records)
     records = records.loc[records["DVCE(mV)"].notna()].copy()
     records.insert(0, "批次", identity.batch)
     records.reset_index(drop=True, inplace=True)
+    parameter_keys = tuple(column.parameter_key for column in output_columns)
+    records.attrs["parameter_keys"] = parameter_keys
 
     return ParsedPowerTechXlsxFile(
         path=path,
@@ -279,6 +289,7 @@ def parse_powertech_xlsx_file(path: str | Path) -> ParsedPowerTechXlsxFile:
         source_rows=source_rows,
         kept_rows=len(records),
         invalid_marker_counts=dict(invalid_counts),
+        parameter_keys=parameter_keys,
     )
 
 
@@ -318,24 +329,68 @@ def _validate_header_labels(rows: dict[str, list[object]], path: Path) -> None:
             )
 
 
-def _detect_layout(item_row: list[object], path: Path) -> PowerTechXlsxLayout:
-    actual = []
-    for expected_number, value in enumerate(item_row[3:], start=1):
-        if pd.isna(value):
-            continue
-        match = _ITEM_RE.fullmatch(_text(value))
+def _build_items(
+    rows: dict[str, list[object]], path: Path
+) -> list[PowerTechItem]:
+    item_row = rows["Item Name"]
+    if [_text(value) for value in item_row[:3]] != ["Item Name", "", ""]:
+        raise DianjiFormatError(f"{path.name} 的 Item Name 前导字段未经验证")
+    if [_text(value) for value in rows["Serial#"][:3]] != [
+        "Serial#",
+        "S#",
+        "Bin#",
+    ]:
+        raise DianjiFormatError(f"{path.name} 的 Serial# 前导字段未经验证")
+
+    last_item_column = max(
+        (index for index, value in enumerate(item_row) if _text(value)),
+        default=2,
+    )
+    items = []
+    for expected_number, column in enumerate(
+        range(3, last_item_column + 1), start=1
+    ):
+        value = _text(item_row[column])
+        match = _ITEM_RE.fullmatch(value)
         if match is None or int(match.group("number")) != expected_number:
             raise DianjiFormatError(
                 f"{path.name} 的 Item 编号/名称不连续: {value!r}"
             )
-        actual.append(match.group("name").strip().upper())
-    actual_tuple = tuple(actual)
-    for layout in POWERTECH_XLSX_LAYOUTS:
-        if actual_tuple == layout.item_bases:
-            return layout
+        items.append(
+            PowerTechItem(
+                item_no=expected_number,
+                field_index=column,
+                base_name=match.group("name").strip().upper(),
+                bias1=_text(rows["Bias1"][column]),
+                bias2=_text(rows["Bias2"][column]),
+                bias3=_text(rows["Bias3"][column]),
+                unit=_text(rows["Serial#"][column]),
+                min_limit=_text(rows["Min Limit"][column]),
+                max_limit=_text(rows["Max Limit"][column]),
+                source_name=match.group("name").strip(),
+            )
+        )
+    if not items:
+        raise DianjiFormatError(f"{path.name} 没有 PowerTECH XLSX Item")
+    return items
+
+
+def _detect_layout(
+    items: list[PowerTechItem], path: Path
+) -> PowerTechXlsxLayout:
+    """Keep the verified tester/layout binding while allowing right additions."""
+    actual = tuple(item.base_name for item in items)
+    matches = [
+        layout
+        for layout in POWERTECH_XLSX_LAYOUTS
+        if len(actual) >= len(layout.item_bases)
+        and actual[: len(layout.item_bases)] == layout.item_bases
+    ]
+    if matches:
+        return max(matches, key=lambda layout: len(layout.item_bases))
     raise DianjiFormatError(
-        f"{path.name} 的 PowerTECH XLSX Item 布局未经验证: "
-        f"数量={len(actual_tuple)}, Item={list(actual_tuple)}"
+        f"{path.name} 的 PowerTECH XLSX 核心 Item 布局未经验证: "
+        f"数量={len(actual)}, Item={list(actual)}"
     )
 
 
@@ -440,17 +495,17 @@ def _validate_output_fields(
 
 def _build_specs(
     rows: dict[str, list[object]],
-    layout: PowerTechXlsxLayout,
+    output_columns: list[PlannedPowerTechColumn],
     identity: FileIdentity,
     path: Path,
 ) -> pd.DataFrame:
     records = []
-    for field in layout.output_fields:
-        column = field.item_no + 2
+    for output_column in output_columns:
+        column = output_column.item.field_index
         low_raw = _text(rows["Min Limit"][column])
         high_raw = _text(rows["Max Limit"][column])
-        low_value = _parse_limit(low_raw)
-        high_value = _parse_limit(high_raw)
+        low_value = _parse_limit(low_raw, output_column.factor)
+        high_value = _parse_limit(high_raw, output_column.factor)
         normalized = (
             low_value is not None and high_value is not None and low_value > high_value
         )
@@ -465,8 +520,8 @@ def _build_specs(
             {
                 "Source_ID": path.stem,
                 "lot_ID": identity.batch,
-                "Parameter": field.output_name,
-                "Unit": field.unit,
+                "Parameter": output_column.name,
+                "Unit": output_column.unit,
                 "Low_Limit": low_value,
                 "High_Limit": high_value,
                 "Low_Limit_Raw": low_raw,
@@ -482,6 +537,7 @@ def _build_specs(
 def _parse_measurement_series(
     raw_values: pd.Series,
     output_name: str,
+    factor: float,
     invalid_counts: Counter[str],
     path: Path,
 ) -> pd.Series:
@@ -499,16 +555,16 @@ def _parse_measurement_series(
             f"{path.name} 的 {output_name} 包含未经验证的非数值标记: {examples}"
         )
     numeric.loc[overflow | sentinels] = math.nan
-    return numeric
+    return numeric * factor
 
 
-def _parse_limit(value: str) -> float | None:
+def _parse_limit(value: str, factor: float = 1.0) -> float | None:
     if not value:
         return None
     match = re.search(r"[+-]?(?:\d+(?:\.\d*)?|\.\d+)(?:[Ee][+-]?\d+)?", value)
     if match is None:
         return None
-    result = float(match.group(0))
+    result = float(match.group(0)) * factor
     return result if math.isfinite(result) else None
 
 
