@@ -19,6 +19,7 @@ from factories.jijia.parser import (
     parse_jijia_file,
     parse_jijia_filename,
 )
+from factories.jijia.pat_cleaner import build_raw_pat
 
 
 SOURCE_NAME = "NCE15TD120BT_C178121.00_26PA06370031-02_DC_260409034023.csv"
@@ -154,6 +155,25 @@ class JijiaCleanerTests(unittest.TestCase):
             self.assertNotIn("SOFT_BIN", result.columns)
             self.assertEqual(cleaner.last_run_summary["source_rows"], 2)
             self.assertEqual(cleaner.last_run_summary["kept_rows"], 2)
+
+    def test_raw_pat_reuses_the_common_ft_formula(self):
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            source = root / "input"
+            source.mkdir()
+            _make_source(source)
+            result = build_raw_pat(source, spool_dir=root / "spool")
+
+        row = result[result["统计量"] == "CONT_C3(mA)"].iloc[0]
+        expected_sigma = (7.9375 - 6.8125) / 1.35
+        self.assertEqual(int(row["总计数"]), 2)
+        self.assertAlmostEqual(float(row["Sigma"]), expected_sigma, places=6)
+        self.assertAlmostEqual(
+            float(row["LCL\n计算值"]), 7.375 - 6 * expected_sigma, places=6
+        )
+        self.assertAlmostEqual(
+            float(row["UCL\n计算值"]), 7.375 + 6 * expected_sigma, places=6
+        )
 
 
 if __name__ == "__main__":

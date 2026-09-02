@@ -11,6 +11,7 @@ from factories.tms_adapters.identity import (
     parse_riyuexin_dc_filename,
 )
 from factories.tms_adapters.riyueguang_dc import RiyueguangTmsDCCleaner
+from factories.tms_adapters.riyueguang_pat import build_raw_pat as build_riyueguang_pat
 from factories.tms_adapters.riyuexin_dc import RiyuexinTmsDCCleaner
 
 
@@ -45,6 +46,20 @@ def _remove_measurement_rows(path: Path, *, test_no_row: int) -> None:
     frame = pd.read_excel(path, sheet_name="Test Data", header=None)
     frame = frame.iloc[: test_no_row + 1]
     frame.to_excel(path, sheet_name="Test Data", index=False, header=False)
+
+
+def _write_ebr_source(path: Path, *, items: tuple[str, ...], units: tuple[str, ...]):
+    frame = pd.DataFrame([[None] * (5 + len(items)) for _ in range(15)])
+    frame.iat[0, 4] = "Test"
+    frame.iat[1, 4] = "Item"
+    frame.iat[5, 4] = "Unit"
+    frame.iat[12, 0] = "Test No."
+    for offset, (item, unit) in enumerate(zip(items, units), start=5):
+        frame.iat[1, offset] = item
+        frame.iat[5, offset] = unit
+        frame.iat[13, offset] = float(offset)
+        frame.iat[14, offset] = float(offset + 1)
+    frame.to_excel(path, index=False, header=False)
 
 
 class FtIdentityTest(unittest.TestCase):
@@ -138,6 +153,50 @@ class FtAdapterTest(unittest.TestCase):
             cleaner = RiyueguangTmsDCCleaner(source, root / "output")
             with self.assertRaisesRegex(ValueError, "Unit 行"):
                 cleaner.extract_dc_data(path)
+
+    def test_riyueguang_raw_pat_reuses_the_common_ft_formula(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            source = root / "DC"
+            source.mkdir()
+            path = source / "NCT6528068_NCEA75ED120BT(LA)-3B00_FA54-9744_20250722_070217.xlsx"
+            _write_dc_source(path, unit_row=7, test_no_row=14, time_row=6)
+            result = build_riyueguang_pat(source, spool_dir=root / "spool")
+
+        row = result[result["统计量"] == "VTH(V)"].iloc[0]
+        expected_sigma = (2.575 - 2.525) / 1.35
+        self.assertEqual(int(row["总计数"]), 2)
+        self.assertAlmostEqual(float(row["Sigma"]), expected_sigma, places=6)
+        self.assertAlmostEqual(
+            float(row["LCL\n计算值"]), 2.55 - 6 * expected_sigma, places=6
+        )
+        self.assertAlmostEqual(
+            float(row["UCL\n计算值"]), 2.55 + 6 * expected_sigma, places=6
+        )
+
+    def test_riyueguang_raw_pat_includes_reviewed_dvds_and_rg_parameters(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            dvds = root / "DVDS"
+            rg = root / "RG"
+            dvds.mkdir()
+            rg.mkdir()
+            _write_ebr_source(
+                dvds / "ST2_EBR_NCEA75ED120BT(LA)-3B00_FA54-9744_NCT6528068.xlsx",
+                items=("CONT", "DVCE", "DVF"),
+                units=("V", "mV", "mV"),
+            )
+            _write_ebr_source(
+                rg / "ST1_EBR_NCEA75ED120BT(LA)-3B00_FA54-9744_NCT6528068.xlsx",
+                items=("OPEN", "RG", "CISS"),
+                units=("V", "R", "pF"),
+            )
+            result = build_riyueguang_pat(root, spool_dir=root / "spool")
+
+        self.assertEqual(
+            set(result["统计量"].iloc[1:]),
+            {"DVCE(mV)", "DVF(mV)", "RG(R)", "CISS(pF)"},
+        )
 
     def test_riyueguang_manual_lot_fills_data_spec_and_manifest_without_raw_change(self):
         with tempfile.TemporaryDirectory() as temporary:
