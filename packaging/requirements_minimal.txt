@@ -3,10 +3,12 @@
 
 # 核心依赖（必需）
 pandas>=2.2.0,<2.4.0
+numpy>=1.24.0,<2.0.0
 openpyxl>=3.0.0,<3.2.0
 PyQt5>=5.15.0,<5.16.0
 plotly>=5.0.0
 streamlit>=1.28.0
+matplotlib>=3.7.0,<4.0.0
 
 # 性能优化依赖（可选，但建议保留）
 python-calamine>=0.2.0
@@ -17,5 +19,5 @@ PyInstaller>=5.0.0,<7.0.0
 
 # 注意：
 # 1. 版本范围限制可以减少依赖冲突
-# 2. Plotly 和 Streamlit 用于日月新、杰群、电基 FT 散点图
+# 2. Matplotlib/Streamlit 用于静态 FT 散点图与箱体图；Plotly 暂保留旧接口兼容
 # 3. 如果用户已有完整的anaconda环境，可以跳过这些包的安装 

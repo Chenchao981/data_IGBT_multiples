@@ -9,6 +9,7 @@ from frontend.ft_scatter import (
     build_parameter_figure,
     export_scatter_bundle,
     load_scatter_bundle,
+    load_scatter_manifest,
     parameter_limit_summary,
     prepare_parameter_points,
 )
@@ -45,6 +46,16 @@ class FTScatterBundleTests(unittest.TestCase):
             raw_manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
             self.assertEqual(raw_manifest["data_file"], "ft_scatter_data.csv.gz")
             self.assertEqual(raw_manifest["cleaned_file"], "FA59-3997_001.xlsx")
+            self.assertEqual(
+                raw_manifest["group_contract"],
+                {
+                    "batch_key": "lot_ID",
+                    "sample_order_key": "NUM",
+                    "spec_key": "Source_ID",
+                    "box_group_keys": ["lot_ID"],
+                    "subgroup_key": None,
+                },
+            )
 
             named_manifest = export_scatter_bundle(
                 data,
@@ -174,6 +185,99 @@ class FTScatterBundleTests(unittest.TestCase):
 
         self.assertEqual([trace.name for trace in marker_traces], lots)
         self.assertEqual(len({trace.marker.color for trace in marker_traces}), 17)
+
+    def test_bundle_round_trip_preserves_numeric_looking_identities(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            output_dir = Path(temp_dir)
+            cleaned_file = output_dir / "cleaned.xlsx"
+            cleaned_file.touch()
+            data = pd.DataFrame(
+                {
+                    "NUM": [1, 2],
+                    "lot_ID": ["001", "1"],
+                    "Source_ID": ["0007", "7"],
+                    "P": [1.0, 2.0],
+                }
+            )
+            specs = pd.DataFrame(
+                {
+                    "Source_ID": ["0007", "7"],
+                    "lot_ID": ["001", "1"],
+                    "Parameter": ["P", "P"],
+                    "Low_Limit": [0.0, 0.0],
+                    "High_Limit": [3.0, 3.0],
+                }
+            )
+            manifest_path = export_scatter_bundle(
+                data, specs, output_dir, cleaned_file=cleaned_file
+            )
+            _, loaded_data, loaded_specs = load_scatter_bundle(manifest_path)
+
+            self.assertEqual(loaded_data["lot_ID"].tolist(), ["001", "1"])
+            self.assertEqual(loaded_data["Source_ID"].tolist(), ["0007", "7"])
+            self.assertEqual(loaded_specs["Source_ID"].tolist(), ["0007", "7"])
+            self.assertEqual(loaded_specs["lot_ID"].tolist(), ["001", "1"])
+
+    def test_present_but_damaged_group_contract_does_not_use_legacy_fallback(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            manifest_path = Path(temp_dir) / "manifest.json"
+            manifest_path.write_text(
+                json.dumps({"schema_version": 1, "group_contract": {}}),
+                encoding="utf-8",
+            )
+            with self.assertRaisesRegex(ValueError, "分组契约"):
+                load_scatter_manifest(manifest_path)
+
+    def test_export_rejects_source_identity_reused_across_lots(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            output_dir = Path(temp_dir)
+            cleaned_file = output_dir / "cleaned.xlsx"
+            cleaned_file.touch()
+            data = pd.DataFrame(
+                {
+                    "NUM": [1, 2],
+                    "lot_ID": ["LOT-A", "LOT-B"],
+                    "Source_ID": ["SAME", "SAME"],
+                    "P": [1.0, 2.0],
+                }
+            )
+            with self.assertRaisesRegex(ValueError, "唯一对应"):
+                export_scatter_bundle(
+                    data,
+                    pd.DataFrame(),
+                    output_dir,
+                    cleaned_file=cleaned_file,
+                )
+
+    def test_bundle_load_rejects_invalid_nonempty_spec_limit(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            output_dir = Path(temp_dir)
+            cleaned_file = output_dir / "cleaned.xlsx"
+            cleaned_file.touch()
+            data = pd.DataFrame(
+                {
+                    "NUM": [1],
+                    "lot_ID": ["LOT-A"],
+                    "Source_ID": ["A"],
+                    "P": [1.0],
+                }
+            )
+            specs = pd.DataFrame(
+                {
+                    "Source_ID": ["A"],
+                    "lot_ID": ["LOT-A"],
+                    "Parameter": ["P"],
+                    "Low_Limit": ["abc"],
+                    "High_Limit": [2.0],
+                }
+            )
+            manifest_path = export_scatter_bundle(
+                data, specs, output_dir, cleaned_file=cleaned_file
+            )
+            with self.assertRaisesRegex(
+                ValueError, r"Low_Limit 不是有限数字.*Source_ID=A"
+            ):
+                load_scatter_bundle(manifest_path)
 
 
 if __name__ == "__main__":

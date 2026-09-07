@@ -151,7 +151,7 @@ class JiequnDCCleaner(BaseCleaner):
             ).resolve()
 
             logger.info(f"保存: {out} ({len(merged):,} 行)")
-            logger.info(f"FT散点图数据包: {self.last_scatter_manifest}")
+            logger.info(f"FT图表数据包: {self.last_scatter_manifest}")
             return True
 
         except Exception as e:

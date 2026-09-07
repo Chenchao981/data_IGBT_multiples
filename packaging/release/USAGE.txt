@@ -6,10 +6,10 @@ Run:
 3. Start the application: python ft_data_cleaner.pyz
 
 Features:
-- Riyuexin: DC, FT scatter charts, DVDS, RG, PAT, and SYL&SBL
+- Riyuexin: DC, FT static scatter/box charts, DVDS, RG, PAT, and SYL&SBL
 - TMS adapters: independent, fail-closed Riyuexin and Riyueguang FT DC routes
-- Jiequn: DC-AI, DC-1, DC-unified, DC-3, FT scatter charts, DVDS, RG, PAT, and SYL&SBL
-- Dianji: FT-ALL cleaning, FT scatter charts, PAT, and SYL&SBL
+- Jiequn: DC-AI, DC-1, DC-unified, DC-3, FT static scatter/box charts, DVDS, RG, PAT, and SYL&SBL
+- Dianji: FT-ALL cleaning, FT static scatter/box charts, PAT, and SYL&SBL
 - Jijia: NCE15TD120BT STS8203 FT-ALL cleaning to Riyuexin-compatible DC_Data
 
 Notes:
@@ -32,16 +32,16 @@ Notes:
 - Riyuexin and Riyueguang PAT accept a product root with DC/DVDS/RG subdirectories or one raw type directory. Riyueguang keeps its independent reviewed EBR/DC layouts. Dianji PAT accepts one registered raw format directory and rejects mixed formats or products. Jijia PAT accepts the reviewed STS8203 CSV product directory.
 - SYL&SBL accepts one .xls or .xlsx yield workbook.
 - Output files are saved under the selected output directory.
-- After a supported Riyuexin, Jiequn, or Dianji cleaning operation succeeds, click FT Scatter Chart to open one chart per parameter.
+- After a supported Riyuexin, Jiequn, or Dianji cleaning operation succeeds, click Scatter / Box Charts to open the FT chart page.
 - Scatter limits and bias conditions come from each source file and use the same output-unit conversion as cleaned measurements.
 - Reversed numeric Min/Max values in Jiequn P-type programs are normalized for LSL/USL while retaining the raw cells.
-- Scatter colors and the right-side legend identify lot_ID batches.
-- Scatter charts use a light theme with enlarged markers, axis numbers, titles, legends, and limit labels.
-- Dense repeated in-spec values are compacted for faster opening; every OOS point is retained.
+- Static scatter and box PNGs keep the FT contract: complete lot_ID is the batch and box group, NUM is display order, and Source_ID only binds source limits. No Wafer_ID is inferred.
+- Scatter and box charts use a white background, distinct batch colors, focused/full Y-range controls, source-bound limit annotations, and downloadable PNG files.
+- Static scatter charts draw every finite measurement without sampling. Box charts use all finite values and one box per complete lot_ID; their 1.5-IQR whiskers are a chart-only definition and do not change PAT, Bin, or yield statistics.
 - Review the application log if processing fails.
 - TMS may supply a manually confirmed Lot only when an approved filename profile
   is otherwise complete and the Lot field alone is absent. The override never
   changes source files and cannot replace a conflicting parsed Lot.
 
-Version: 2.20.0
+Version: 2.21.0
 Author: cc

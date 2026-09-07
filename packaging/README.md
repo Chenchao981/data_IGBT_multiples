@@ -47,7 +47,7 @@ python build_secure_pyz.py
 - ✅ GUI界面代码
 - ✅ 必要的依赖文件
 - ✅ requirements.txt
-- ✅ Plotly/Streamlit 散点图逻辑和独立前端入口
+- ✅ Matplotlib/Streamlit 静态散点图与箱体图逻辑和独立前端入口
 
 ## 输出
 
@@ -74,6 +74,6 @@ python ft_data_cleaner.pyz
 
 ## 版本信息
 
-- 版本：2.20.0
+- 版本：2.21.0
 - 作者：cc
 - 创建时间：2025-01-20 

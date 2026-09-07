@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 
-"""FT scatter bundle export, loading, sampling, and Plotly figure helpers."""
+"""FT chart bundle export/loading plus legacy Plotly compatibility helpers."""
 
 from __future__ import annotations
 
@@ -10,6 +10,7 @@ from datetime import datetime
 from pathlib import Path
 from typing import Iterable
 
+import numpy as np
 import pandas as pd
 
 
@@ -74,6 +75,26 @@ def export_scatter_bundle(
     if data.empty:
         raise ValueError("散点图数据为空")
 
+    identities = data[["lot_ID", "Source_ID"]].copy()
+    for column, label in (("lot_ID", "批次 lot_ID"), ("Source_ID", "来源 Source_ID")):
+        if identities[column].isna().any():
+            raise ValueError(f"FT 图表数据存在空{label}")
+        identities[column] = identities[column].astype(str)
+        blank = identities[column].str.strip().str.lower().isin({"", "nan"})
+        if blank.any():
+            raise ValueError(f"FT 图表数据存在空{label}")
+    source_lot_counts = (
+        identities.drop_duplicates()
+        .groupby("Source_ID", sort=False)["lot_ID"]
+        .nunique()
+    )
+    ambiguous_sources = source_lot_counts[source_lot_counts > 1].index.tolist()
+    if ambiguous_sources:
+        raise ValueError(
+            "FT 图表 Source_ID 必须唯一对应一个 lot_ID: "
+            + "、".join(ambiguous_sources[:3])
+        )
+
     parameters = [column for column in data.columns if column not in IDENTIFIER_COLUMNS]
     if not parameters:
         raise ValueError("散点图数据中没有测试参数")
@@ -97,6 +118,13 @@ def export_scatter_bundle(
         "parameters": parameters,
         "sources": [str(value) for value in data["Source_ID"].dropna().drop_duplicates()],
         "lots": [str(value) for value in data["lot_ID"].dropna().drop_duplicates()],
+        "group_contract": {
+            "batch_key": "lot_ID",
+            "sample_order_key": "NUM",
+            "spec_key": "Source_ID",
+            "box_group_keys": ["lot_ID"],
+            "subgroup_key": None,
+        },
     }
     manifest_file.write_text(
         json.dumps(manifest, ensure_ascii=False, indent=2), encoding="utf-8"
@@ -116,22 +144,92 @@ def _resolve_manifest_child(manifest_path: Path, relative_path: str) -> Path:
     return child
 
 
-def load_scatter_bundle(manifest_path: Path | str) -> tuple[dict, pd.DataFrame, pd.DataFrame]:
-    """Load and validate one scatter bundle from its explicit manifest."""
+def load_scatter_manifest(manifest_path: Path | str) -> dict:
+    """Load only manifest metadata so opening the page does not render charts."""
+
     manifest_path = Path(manifest_path).resolve()
     if not manifest_path.is_file():
         raise FileNotFoundError(f"散点图清单不存在: {manifest_path}")
     manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
     if manifest.get("schema_version") != 1:
         raise ValueError("不支持的散点图数据版本")
+    contract = manifest["group_contract"] if "group_contract" in manifest else {
+        "batch_key": "lot_ID",
+        "sample_order_key": "NUM",
+        "spec_key": "Source_ID",
+        "box_group_keys": ["lot_ID"],
+        "subgroup_key": None,
+    }
+    expected_contract = {
+        "batch_key": "lot_ID",
+        "sample_order_key": "NUM",
+        "spec_key": "Source_ID",
+        "box_group_keys": ["lot_ID"],
+        "subgroup_key": None,
+    }
+    if contract != expected_contract:
+        raise ValueError(f"不支持的 FT 图表分组契约: {contract}")
+    manifest["group_contract"] = contract
+    return manifest
+
+
+def scatter_bundle_signature(manifest_path: Path | str, manifest: dict) -> tuple:
+    """Return a cache key covering manifest, data, and source-bound specs."""
+
+    manifest_path = Path(manifest_path).resolve()
+    files = [
+        manifest_path,
+        _resolve_manifest_child(manifest_path, manifest["data_file"]),
+        _resolve_manifest_child(manifest_path, manifest["spec_file"]),
+    ]
+    return tuple(
+        (str(path), path.stat().st_mtime_ns, path.stat().st_size) for path in files
+    )
+
+
+def load_scatter_bundle(manifest_path: Path | str) -> tuple[dict, pd.DataFrame, pd.DataFrame]:
+    """Load and validate one chart bundle from its explicit manifest."""
+
+    manifest_path = Path(manifest_path).resolve()
+    manifest = load_scatter_manifest(manifest_path)
 
     data_file = _resolve_manifest_child(manifest_path, manifest["data_file"])
     spec_file = _resolve_manifest_child(manifest_path, manifest["spec_file"])
-    data = pd.read_csv(data_file, compression="gzip", low_memory=False)
-    specs = pd.read_csv(spec_file, keep_default_na=False)
+    data = pd.read_csv(
+        data_file,
+        compression="gzip",
+        low_memory=False,
+        dtype={"lot_ID": "string", "Source_ID": "string"},
+    )
+    specs = pd.read_csv(
+        spec_file,
+        keep_default_na=False,
+        dtype={
+            "Source_ID": "string",
+            "lot_ID": "string",
+            "Parameter": "string",
+            "Unit": "string",
+            "Test_Condition": "string",
+        },
+    )
     for column in ("Low_Limit", "High_Limit"):
         if column in specs.columns:
-            specs[column] = pd.to_numeric(specs[column], errors="coerce")
+            raw_values = specs[column]
+            missing = raw_values.map(
+                lambda value: pd.isna(value) or not str(value).strip()
+            )
+            numeric_values = pd.to_numeric(raw_values, errors="coerce")
+            invalid = ~missing & (
+                numeric_values.isna() | ~np.isfinite(numeric_values)
+            )
+            if invalid.any():
+                row = specs.loc[invalid].iloc[0]
+                raise ValueError(
+                    f"规格 {column} 不是有限数字: 参数={row.get('Parameter', '')}, "
+                    f"Source_ID={row.get('Source_ID', '')}, "
+                    f"lot_ID={row.get('lot_ID', '')}, 原值={row.get(column)!r}"
+                )
+            specs[column] = numeric_values
 
     required = {"NUM", "lot_ID", "Source_ID"}
     if not required.issubset(data.columns):

@@ -236,12 +236,12 @@ class BasePanel(QWidget):
     def _build_action_buttons(self) -> QHBoxLayout:
         hbox = QHBoxLayout()
         hbox.addStretch()
-        self.scatter_btn = QPushButton("📊 FT 散点图")
+        self.scatter_btn = QPushButton("📊 散点图 / 箱体图")
         self.scatter_btn.setMinimumHeight(50)
         self.scatter_btn.setMinimumWidth(210)
         self.scatter_btn.setEnabled(False)
         self.scatter_btn.setVisible(bool(self.scatter_supported_types))
-        self.scatter_btn.setToolTip("请先完成一次支持散点图的 FT 数据清洗")
+        self.scatter_btn.setToolTip("请先完成一次支持参数图表的 FT 数据清洗")
         self.scatter_btn.clicked.connect(self._open_scatter)
         self.scatter_btn.setStyleSheet(
             "QPushButton{background:#2563eb;color:#ffffff;font-size:20px;"
@@ -261,7 +261,7 @@ class BasePanel(QWidget):
             "QPushButton:pressed{background:#e85d75;}"
             "QPushButton:disabled{background:#e8b9c5;color:#fff5f7;}"
         )
-        # 用户按从左到右的业务顺序操作：先清洗，再打开散点图。
+        # 用户按从左到右的业务顺序操作：先清洗，再打开参数图表。
         hbox.addWidget(self.start_btn)
         hbox.addSpacing(14)
         hbox.addWidget(self.scatter_btn)
@@ -440,8 +440,8 @@ class BasePanel(QWidget):
                     self._scatter_manifest_by_type[self._selected_type] = manifest_path
                     self.scatter_btn.setEnabled(True)
                     self.scatter_btn.setToolTip(str(manifest_path))
-                    self._log("📊 散点图数据已准备完成，可点击“FT 散点图”")
-                    msg += "\n\n散点图数据已准备完成，请点击“FT 散点图”。"
+                    self._log("📊 图表数据已准备完成，可点击“散点图 / 箱体图”")
+                    msg += "\n\n图表数据已准备完成，请点击“散点图 / 箱体图”。"
             QMessageBox.information(self, "完成", msg)
         else:
             QMessageBox.warning(self, "失败", msg)
@@ -455,18 +455,18 @@ class BasePanel(QWidget):
     def _open_scatter(self):
         manifest = self._scatter_manifest_by_type.get(self._selected_type)
         if not manifest or not manifest.is_file():
-            QMessageBox.warning(self, "提示", "请先完成一次支持散点图的 FT 数据清洗")
+            QMessageBox.warning(self, "提示", "请先完成一次支持参数图表的 FT 数据清洗")
             return
         try:
             from gui.scatter_launcher import launch_ft_scatter
 
             url = launch_ft_scatter(manifest)
-            self._log(f"已打开 FT 散点图: {url}")
+            self._log(f"已打开 FT 散点图 / 箱体图: {url}")
         except Exception as exc:
             QMessageBox.critical(
                 self,
-                "散点图启动失败",
-                f"{exc}\n\n请确认已安装 requirements.txt 中的 Streamlit 和 Plotly。",
+                "图表启动失败",
+                f"{exc}\n\n请确认已安装 requirements.txt 中的 Streamlit 和 Matplotlib。",
             )
 
     def _log(self, msg: str):

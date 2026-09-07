@@ -581,9 +581,9 @@ class DCDataCleaner:
                         self.last_output_file.parent,
                         cleaned_file=self.last_output_file,
                     ).resolve()
-                    logger.info(f"FT散点图数据包生成成功: {self.last_scatter_manifest}")
+                    logger.info(f"FT图表数据包生成成功: {self.last_scatter_manifest}")
                 except Exception as exc:
-                    logger.error(f"FT散点图数据包生成失败: {exc}", exc_info=True)
+                    logger.error(f"FT图表数据包生成失败: {exc}", exc_info=True)
                     return False
             
             if success:

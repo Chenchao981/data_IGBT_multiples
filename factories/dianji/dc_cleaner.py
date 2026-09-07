@@ -261,7 +261,7 @@ class DianjiDCCleaner(BaseCleaner):
             len(merged),
             source_rows - len(merged),
         )
-        logger.info("FT散点图数据包: %s", self.last_scatter_manifest)
+        logger.info("FT图表数据包: %s", self.last_scatter_manifest)
         return True
 
 
