@@ -510,6 +510,7 @@ class FTStaticChartContractTests(unittest.TestCase):
                 app = AppTest.from_file(str(app_path)).run(timeout=30)
                 self.assertFalse(list(app.exception))
                 self.assertEqual(len(app.get("imgs")), 0)
+                self.assertEqual(len(app.info), 0)
                 self.assertEqual(
                     [checkbox.label for checkbox in app.checkbox],
                     ["散点图显示完整纵轴范围", "箱体图显示完整纵轴范围"],

@@ -89,11 +89,6 @@ st.markdown(
     f"｜ 批次：{len(manifest.get('lots', []))} ｜ 参数：{len(parameters)}</div>",
     unsafe_allow_html=True,
 )
-st.info(
-    "FT 分组保持不变：完整 lot_ID 是批次与箱体分组；NUM 仅表示批次内样本展示顺序；"
-    "Source_ID 仅用于来源追溯和规格绑定。不会生成或套用 Wafer_ID。"
-)
-
 st.subheader("图表筛选")
 if st.session_state.get("ft_parameter_selection_scope") != bundle_signature:
     st.session_state["ft_parameter_selection_scope"] = bundle_signature
