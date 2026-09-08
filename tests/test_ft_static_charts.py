@@ -23,6 +23,7 @@ from frontend.ft_static_charts import (
     render_ft_boxplot_png,
     render_ft_scatter_png,
     safe_png_name,
+    validate_y_limits,
 )
 
 
@@ -41,6 +42,45 @@ def _specs(source_ids, *, low=None, high=None, units=None):
 
 
 class FTStaticChartContractTests(unittest.TestCase):
+    def test_manual_y_limits_are_exact_and_preserve_box_statistics(self):
+        data = pd.DataFrame({"NUM": range(1, 6), "lot_ID": ["A"] * 5,
+                             "Source_ID": ["S"] * 5, "P": [-10., 1., 2., 3., 100.]})
+        original = data.copy(deep=True)
+        layout = prepare_ft_chart_layout(data)
+        specs = _specs(["S"], low=[-20.], high=[200.])
+        for boxplot in (False, True):
+            automatic, auto_stats = make_ft_distribution_figure(
+                data, specs, "P", layout, boxplot=boxplot, focus=False
+            )
+            for focus in (False, True):
+                manual, stats = make_ft_distribution_figure(
+                    data, specs, "P", layout, boxplot=boxplot, focus=focus, y_limits=(1., 3.)
+                )
+                try:
+                    self.assertEqual(manual.axes[0].get_ylim(), (1., 3.))
+                    self.assertEqual(stats["below_count"], 1)
+                    self.assertEqual(stats["above_count"], 1)
+                    self.assertEqual(stats["valid_count"], auto_stats["valid_count"])
+                    self.assertEqual(stats["box_count"], auto_stats["box_count"])
+                    self.assertTrue(any("自定义 Y 轴" in text.get_text() for text in manual.texts))
+                    if boxplot:
+                        for old, new in zip(automatic.axes[0].lines, manual.axes[0].lines):
+                            np.testing.assert_array_equal(old.get_ydata(), new.get_ydata())
+                finally:
+                    manual.clear()
+            automatic.clear()
+        for renderer in (render_ft_scatter_png, render_ft_boxplot_png):
+            png, stats = renderer(data, specs, "P", layout, y_limits=(-1e-6, 5e-6))
+            self.assertTrue(png.startswith(b"\x89PNG"))
+            self.assertEqual(stats["y_limits"], (-1e-6, 5e-6))
+        pd.testing.assert_frame_equal(data, original)
+
+    def test_manual_y_limits_reject_invalid_bounds(self):
+        self.assertEqual(validate_y_limits(("-1e-6", "2.5e-6")), (-1e-6, 2.5e-6))
+        for bounds in (("", "2"), ("abc", 2), (1, 1), (2, 1), (np.nan, 1), (0, np.inf)):
+            with self.subTest(bounds=bounds), self.assertRaises(ValueError):
+                validate_y_limits(bounds)
+
     def test_layout_uses_only_complete_lot_and_num_order(self):
         data = pd.DataFrame(
             {
@@ -492,6 +532,54 @@ class FTStaticChartContractTests(unittest.TestCase):
                 app.radio[0].set_value("散点图").run(timeout=30)
                 self.assertFalse(list(app.exception))
                 self.assertTrue(any("缓存复用" in caption.value for caption in app.caption))
+
+                app.checkbox[2].set_value(True)
+                app.text_input[0].set_value("1.5")
+                app.text_input[1].set_value("3.5")
+                app.button[1].click().run(timeout=30)
+                self.assertFalse(list(app.exception))
+                self.assertTrue(any("自定义 Y 轴：1.5 ～ 3.5" in c.value for c in app.caption))
+                self.assertEqual(len(app.get("download_button")), 1)
+
+                app.radio[0].set_value("箱体图").run(timeout=30)
+                self.assertFalse(app.checkbox[2].value)
+                app.checkbox[2].set_value(True)
+                app.text_input[0].set_value("-1")
+                app.text_input[1].set_value("10")
+                app.button[1].click().run(timeout=30)
+                self.assertTrue(any("自定义 Y 轴：-1 ～ 10" in c.value for c in app.caption))
+                app.radio[0].set_value("散点图").run(timeout=30)
+                self.assertTrue(any("自定义 Y 轴：1.5 ～ 3.5" in c.value for c in app.caption))
+
+                app.text_input[0].set_value("4")
+                app.button[1].click().run(timeout=30)
+                self.assertTrue(any("最小值必须小于最大值" in w.value for w in app.warning))
+                self.assertEqual(len(app.get("imgs")), 0)
+                self.assertEqual(len(app.get("download_button")), 0)
+                app.checkbox[2].set_value(False)
+                app.button[1].click().run(timeout=30)
+                self.assertEqual(len(app.get("imgs")), 1)
+                self.assertTrue(any("自动 Y 轴" in c.value for c in app.caption))
+
+                # A second parameter must not inherit P's custom axis.
+                data["Q"] = data["P"] * 100
+                expanded_specs = pd.concat([
+                    _specs(["A", "B"]),
+                    _specs(["A", "B"]).assign(Parameter="Q"),
+                ], ignore_index=True)
+                export_scatter_bundle(data, expanded_specs, root, cleaned_file=cleaned)
+                app.run(timeout=30)
+                app.multiselect[0].set_value(["P", "Q"])
+                app.button[0].click().run(timeout=30)
+                app.checkbox[2].set_value(True)
+                app.text_input[0].set_value("1")
+                app.text_input[1].set_value("4")
+                app.button[1].click().run(timeout=30)
+                self.assertFalse(list(app.exception))
+                self.assertEqual(len(app.get("imgs")), 2)
+                self.assertFalse(app.checkbox[3].value)
+                self.assertTrue(any("自定义 Y 轴：1 ～ 4" in c.value for c in app.caption))
+                self.assertTrue(any("自动 Y 轴" in c.value for c in app.caption))
 
 
 if __name__ == "__main__":

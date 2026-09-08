@@ -524,6 +524,22 @@ def _font_properties(size: float = 10):
     return FontProperties(family=["Microsoft YaHei", "DejaVu Sans"], size=size)
 
 
+def validate_y_limits(y_limits) -> tuple[float, float] | None:
+    """Accept explicit finite bounds without silently expanding/reversing them."""
+    if y_limits is None:
+        return None
+    try:
+        low, high = y_limits
+        low, high = float(low), float(high)
+    except (TypeError, ValueError, OverflowError) as exc:
+        raise ValueError("请填写 Y 轴最小值和最大值，支持小数、负数和科学计数法") from exc
+    if not np.isfinite([low, high]).all():
+        raise ValueError("Y 轴上下限必须为有限数值，不能使用 NaN 或无穷大")
+    if low >= high:
+        raise ValueError("Y 轴最小值必须小于最大值")
+    return low, high
+
+
 def make_ft_distribution_figure(
     data: pd.DataFrame,
     specs: pd.DataFrame,
@@ -532,6 +548,7 @@ def make_ft_distribution_figure(
     *,
     focus: bool = True,
     boxplot: bool = False,
+    y_limits: tuple[float, float] | None = None,
 ):
     """Build an FT-only figure while leaving source data and statistics intact."""
 
@@ -540,6 +557,7 @@ def make_ft_distribution_figure(
     if not layout.batches:
         raise ValueError("FT 图表没有可用批次")
 
+    y_limits = validate_y_limits(y_limits)
     numeric = parameter_values(data, parameter)
     relevant_specs, unit, conditions = validate_parameter_contract(
         data, specs, parameter, numeric, layout
@@ -555,11 +573,13 @@ def make_ft_distribution_figure(
     axis = figure.add_subplot(111)
     axis.set_facecolor("white")
     finite = numeric[np.isfinite(numeric)]
-    y_range = focused_y_range(numeric, layout.batches) if focus else None
+    y_range = y_limits if y_limits is not None else (
+        focused_y_range(numeric, layout.batches) if focus else None
+    )
     box_statistics = (
         ft_batch_box_statistics(numeric, layout.batches) if boxplot else ()
     )
-    if y_range is not None and boxplot:
+    if y_range is not None and boxplot and y_limits is None:
         visible_boxes = [box for box in box_statistics if box]
         if visible_boxes:
             low = min(y_range[0], min(float(box["whislo"]) for box in visible_boxes))
@@ -618,7 +638,7 @@ def make_ft_distribution_figure(
                 fontproperties=font,
             )
 
-    if boxplot and not focus and len(finite):
+    if boxplot and not focus and y_limits is None and len(finite):
         axis.update_datalim(
             [(0.0, float(finite.min())), (float(len(layout.batches)), float(finite.max()))]
         )
@@ -724,16 +744,20 @@ def make_ft_distribution_figure(
     if y_range is not None and len(finite):
         below = int(np.count_nonzero(finite < y_range[0]))
         above = int(np.count_nonzero(finite > y_range[1]))
+    range_label = (
+        f"自定义 Y 轴 [{y_limits[0]:g}, {y_limits[1]:g}]"
+        if y_limits is not None else "聚焦显示"
+    )
     if boxplot:
         prefix = (
-            f"聚焦显示 · 范围外测量值：低于 {below:,} 个，高于 {above:,} 个"
+            f"{range_label} · 范围外测量值：低于 {below:,} 个，高于 {above:,} 个"
             if y_range is not None
             else f"完整纵轴 · 全部有限测量值 {len(finite):,} 个"
         )
         note = f"{prefix}    |    FT 分组口径：每个完整 lot_ID 一个箱体"
     else:
         note = (
-            f"聚焦显示 · 范围外：低于 {below:,} 点，高于 {above:,} 点"
+            f"{range_label} · 范围外：低于 {below:,} 点，高于 {above:,} 点"
             if y_range is not None
             else f"完整纵轴 · 全量绘制 {len(finite):,} 个有限测量点（不抽样）"
         )
@@ -787,7 +811,9 @@ def make_ft_distribution_figure(
         "box_count": int(sum(bool(box) for box in box_statistics)),
         "below_count": below,
         "above_count": above,
-        "focus": bool(focus),
+        "focus": bool(focus and y_limits is None),
+        "y_limits": tuple(float(value) for value in axis.get_ylim()),
+        "custom_y_limits": y_limits,
         "group_key": "lot_ID",
         "order_key": "NUM",
         "spec_key": "Source_ID",
@@ -815,10 +841,11 @@ def render_ft_scatter_png(
     layout: FTChartLayout,
     *,
     focus: bool = True,
+    y_limits: tuple[float, float] | None = None,
 ) -> tuple[bytes, dict]:
     with _RENDER_LOCK:
         figure, stats = make_ft_distribution_figure(
-            data, specs, parameter, layout, focus=focus, boxplot=False
+            data, specs, parameter, layout, focus=focus, boxplot=False, y_limits=y_limits
         )
         return _render_png(figure), stats
 
@@ -830,10 +857,11 @@ def render_ft_boxplot_png(
     layout: FTChartLayout,
     *,
     focus: bool = True,
+    y_limits: tuple[float, float] | None = None,
 ) -> tuple[bytes, dict]:
     with _RENDER_LOCK:
         figure, stats = make_ft_distribution_figure(
-            data, specs, parameter, layout, focus=focus, boxplot=True
+            data, specs, parameter, layout, focus=focus, boxplot=True, y_limits=y_limits
         )
         return _render_png(figure), stats
 

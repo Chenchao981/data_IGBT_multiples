@@ -6,6 +6,7 @@
 from __future__ import annotations
 
 import os
+from hashlib import sha256
 from pathlib import Path
 from time import perf_counter
 
@@ -21,6 +22,7 @@ from frontend.ft_static_charts import (
     render_ft_boxplot_png,
     render_ft_scatter_png,
     safe_png_name,
+    validate_y_limits,
 )
 
 
@@ -157,15 +159,35 @@ else:
 
 render_total = 0.0
 png_total = 0
-cache_scope = (str(manifest_path), bundle_signature, "ft-static-v2.21.0")
+cache_scope = (str(manifest_path), bundle_signature, "ft-static-v2.22.0")
 if st.session_state.get("ft_png_cache_scope") != cache_scope:
     st.session_state["ft_png_cache_scope"] = cache_scope
     st.session_state["ft_png_cache"] = {}
 png_cache = st.session_state.setdefault("ft_png_cache", {})
+if st.session_state.get("ft_y_settings_scope") != bundle_signature:
+    st.session_state["ft_y_settings_scope"] = bundle_signature
+    st.session_state["ft_y_settings"] = {}
+y_settings = st.session_state.setdefault("ft_y_settings", {})
 for parameter in selected_parameters:
     try:
+        setting_key = (chart_type, parameter)
+        saved = y_settings.get(setting_key, (False, "", ""))
+        widget_key = sha256(repr((bundle_signature, setting_key)).encode()).hexdigest()
+        with st.expander(f"{parameter} · {chart_type} Y 轴范围", expanded=saved[0]):
+            with st.form(f"y_range_{widget_key}"):
+                custom_enabled = st.checkbox("自定义 Y 轴范围", value=saved[0])
+                lower_column, upper_column = st.columns(2)
+                with lower_column:
+                    lower_text = st.text_input("Y 轴最小值", value=saved[1], placeholder="例如 -0.5 或 1e-6")
+                with upper_column:
+                    upper_text = st.text_input("Y 轴最大值", value=saved[2], placeholder="例如 5 或 1e-3")
+                st.caption("数值单位与图中参数一致。勾选后填写上下限，点击应用；取消勾选并应用即可恢复自动范围。")
+                if st.form_submit_button("应用 Y 轴范围并绘图"):
+                    saved = (custom_enabled, lower_text, upper_text)
+                    y_settings[setting_key] = saved
+        y_limits = validate_y_limits((saved[1], saved[2])) if saved[0] else None
         focus = not (scatter_full_range if chart_type == "散点图" else box_full_range)
-        cache_key = (chart_type, parameter, focus)
+        cache_key = (chart_type, parameter, focus, y_limits)
         cached = cache_key in png_cache
         if cached:
             png, stats = png_cache[cache_key]
@@ -179,6 +201,7 @@ for parameter in selected_parameters:
                     parameter,
                     layout,
                     focus=focus,
+                    y_limits=y_limits,
                 )
             else:
                 png, stats = render_ft_boxplot_png(
@@ -187,6 +210,7 @@ for parameter in selected_parameters:
                     parameter,
                     layout,
                     focus=focus,
+                    y_limits=y_limits,
                 )
             render_elapsed = perf_counter() - render_start
             if len(png_cache) >= 64:
@@ -210,6 +234,8 @@ for parameter in selected_parameters:
         )
         st.caption(
             f"有效值 {stats['valid_count']:,} ｜ {chart_detail} ｜ 批次 {stats['batch_count']:,} "
+            f"｜ {'自定义' if y_limits is not None else '自动'} Y 轴："
+            f"{stats['y_limits'][0]:g} ～ {stats['y_limits'][1]:g} "
             f"｜ {'缓存复用' if cached else f'生成 {render_elapsed:.3f} 秒'} "
             f"｜ PNG {len(png) / 1024:.1f} KiB"
             f"{condition_text}"

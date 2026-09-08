@@ -51,6 +51,8 @@ python build_secure_pyz.py
 
 ## 输出
 
+2026-09-08 的 v2.22.0 在 `release/FT_Data_Cleaner_v2.22.0/` 独立交付，包含自定义 Y 轴功能。请运行该目录内的 `startup_program.bat`。根 `release/` 的 v2.21.0 当时被运行中的 Streamlit 占用，保留其文件供当前会话继续使用。
+
 ### 生成文件
 - `release/ft_data_cleaner.pyz` - 主程序包
 - `release/USAGE.txt` - 使用说明
@@ -74,6 +76,6 @@ python ft_data_cleaner.pyz
 
 ## 版本信息
 
-- 版本：2.21.0
+- 版本：2.22.0
 - 作者：cc
 - 创建时间：2025-01-20 
