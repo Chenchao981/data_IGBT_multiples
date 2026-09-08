@@ -51,7 +51,7 @@ python build_secure_pyz.py
 
 ## 输出
 
-2026-09-08 的 v2.22.1 在 `release/FT_Data_Cleaner_v2.22.1/` 独立交付，包含单行自定义 Y 轴操作栏。请运行该目录内的 `startup_program.bat`。之前的发布目录保持不变，不中断正在使用的程序。
+2026-09-08 的 v2.22.1 已同步到常用 `release/` 目录，包含单行自定义 Y 轴操作栏。请运行 `release/startup_program.bat`；已经打开的旧图表页面请刷新并重新选择参数绘图。`release/FT_Data_Cleaner_v2.22.1/` 仍保留相同版本的独立交付副本。
 
 ### 生成文件
 - `release/ft_data_cleaner.pyz` - 主程序包

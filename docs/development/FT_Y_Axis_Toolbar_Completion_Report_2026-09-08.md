@@ -24,3 +24,13 @@
 PYZ SHA256：`2938493aca6dcad88b0c470c1dbe568e5b8c19c6bbfd6f9426ce78f23199b08d`。
 
 版本化发布目录按现有仓库规则仅本地交付，不强制加入 Git；源码、测试和说明进入版本管理。
+
+## 常用入口同步修复（同日追加）
+
+用户反馈截图仍无输入框。检查发现端口 8502、8503、8505、8506 的 FT 图表进程仍加载根 `packaging/release/frontend/ft_scatter_app.py`，该入口与根 PYZ 停留在旧版。仅提供独立新版目录没有完成常用入口升级。
+
+已将验证过的 v2.22.1 PYZ、物理前端、使用说明同步至根 `packaging/release/`，只重启上述四个 FT 图表服务并保留原端口；CP、TMS 及独立 v2.22.0 服务未停止。旧根发布文件备份于 `C:/Users/wgs03/AppData/Local/Temp/ft-release-before-y-axis-5ba06ff5f98c4445a097b31eae403495/`，可恢复。
+
+使用实际 Anaconda 环境验证根发布包：四个 GUI 面板构造正常，源码与物理前端匹配，Y 轴数值校验正常，19 项图表测试通过。根发布 PYZ 的 SHA256 与上述 v2.22.1 相同。根发布文件按仓库已有跟踪规则更新。
+
+用户继续使用 `packaging/release/startup_program.bat` 即可；已打开的旧页面刷新后，重新选择参数并绘制，再输入自定义范围。不必重新清洗数据。
