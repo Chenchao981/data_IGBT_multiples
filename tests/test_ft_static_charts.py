@@ -520,6 +520,13 @@ class FTStaticChartContractTests(unittest.TestCase):
                 self.assertEqual(len(app.get("imgs")), 1)
                 self.assertEqual(len(app.get("download_button")), 1)
 
+                self.assertEqual(len(app.expander), 0)
+                self.assertEqual(app.button[1].label, "应用自定义并绘制")
+                self.assertEqual(len(app.get("form")[0].get("column")), 6)
+                self.assertEqual([field.label for field in app.text_input], ["Y 轴最小值", "Y 轴最大值"])
+                self.assertFalse(any("每个参数一张静态图片" in c.value for c in app.caption))
+                self.assertFalse(any("勾选后填写上下限" in c.value for c in app.caption))
+
                 app.checkbox[0].set_value(True).run(timeout=30)
                 self.assertTrue(app.checkbox[0].value)
                 self.assertFalse(app.checkbox[1].value)
@@ -528,6 +535,8 @@ class FTStaticChartContractTests(unittest.TestCase):
                 self.assertEqual(len(app.get("imgs")), 1)
                 self.assertTrue(app.checkbox[0].value)
                 self.assertFalse(app.checkbox[1].value)
+                self.assertEqual(len(app.expander), 0)
+                self.assertFalse(any("每个完整 lot_ID 一个箱体" in c.value for c in app.caption))
 
                 app.radio[0].set_value("散点图").run(timeout=30)
                 self.assertFalse(list(app.exception))

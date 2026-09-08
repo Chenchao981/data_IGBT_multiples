@@ -14,7 +14,7 @@ import glob
 import fnmatch
 from pathlib import Path
 
-VERSION = '2.22.0'
+VERSION = '2.22.1'
 
 # --- Configuration ---
 # Project root
@@ -244,7 +244,7 @@ Notes:
 - Scatter limits and bias conditions come from each source file and use the same output-unit conversion as cleaned measurements.
 - Reversed numeric Min/Max values in Jiequn P-type programs are normalized for LSL/USL while retaining the raw cells.
 - Static scatter and box PNGs keep the FT contract: complete lot_ID is the batch and box group, NUM is display order, and Source_ID only binds source limits. No Wafer_ID is inferred.
-- Each parameter/chart type supports independent custom Y-axis minimum and maximum values. Enable the custom range, enter both bounds, and apply to redraw and download the same PNG. Disable and apply to restore the automatic range.
+- Each parameter/chart type has a compact inline Y-axis toolbar above its image. Enable the custom range, enter minimum and maximum, and use the right-side Apply button to redraw and download the same PNG. Disable and apply to restore the automatic range.
 - Scatter and box charts use a white background, distinct batch colors, focused/full Y-range controls, source-bound limit annotations, and downloadable PNG files.
 - Static scatter charts draw every finite measurement without sampling. Box charts use all finite values and one box per complete lot_ID; their 1.5-IQR whiskers are a chart-only definition and do not change PAT, Bin, or yield statistics.
 - Review the application log if processing fails.

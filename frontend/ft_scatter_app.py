@@ -57,6 +57,8 @@ st.markdown(
         box-shadow:0 4px 14px rgba(30, 64, 99, 0.08); }
       [data-testid="stCaptionContainer"] { color:#52657a; font-size:0.98rem; }
       [data-testid="stCaptionContainer"] p { font-size:0.98rem; }
+      [data-testid="stForm"] { border:0; padding:0; }
+      [data-testid="stForm"] [data-testid="stHorizontalBlock"] { align-items:center; }
     </style>
     """,
     unsafe_allow_html=True,
@@ -146,16 +148,6 @@ except Exception as exc:
 load_elapsed = perf_counter() - load_start
 
 st.subheader(chart_type)
-if chart_type == "散点图":
-    st.caption(
-        "每个参数一张静态图片；所有有限测量值全量绘制，不抽样。各批次等宽排列，"
-        "批次内按 NUM 保持稳定顺序；横轴不是时间轴。"
-    )
-else:
-    st.caption(
-        "每个完整 lot_ID 一个箱体；同批多个 Source_ID 不拆箱。使用全部有限值计算线性分位数，"
-        "箱须为 1.5 IQR 围栏内的实际最小值/最大值；不绘制离群散点。该定义只用于新增箱体图。"
-    )
 
 render_total = 0.0
 png_total = 0
@@ -173,18 +165,31 @@ for parameter in selected_parameters:
         setting_key = (chart_type, parameter)
         saved = y_settings.get(setting_key, (False, "", ""))
         widget_key = sha256(repr((bundle_signature, setting_key)).encode()).hexdigest()
-        with st.expander(f"{parameter} · {chart_type} Y 轴范围", expanded=saved[0]):
-            with st.form(f"y_range_{widget_key}"):
+        if len(selected_parameters) > 1:
+            st.markdown(f"**{parameter}**")
+        with st.form(f"y_range_{widget_key}"):
+            enabled_column, lower_label, lower_column, upper_label, upper_column, apply_column = st.columns(
+                [1.5, 0.85, 1.5, 0.85, 1.5, 1.8]
+            )
+            with enabled_column:
                 custom_enabled = st.checkbox("自定义 Y 轴范围", value=saved[0])
-                lower_column, upper_column = st.columns(2)
-                with lower_column:
-                    lower_text = st.text_input("Y 轴最小值", value=saved[1], placeholder="例如 -0.5 或 1e-6")
-                with upper_column:
-                    upper_text = st.text_input("Y 轴最大值", value=saved[2], placeholder="例如 5 或 1e-3")
-                st.caption("数值单位与图中参数一致。勾选后填写上下限，点击应用；取消勾选并应用即可恢复自动范围。")
-                if st.form_submit_button("应用 Y 轴范围并绘图"):
-                    saved = (custom_enabled, lower_text, upper_text)
-                    y_settings[setting_key] = saved
+            with lower_label:
+                st.markdown("Y 轴最小值")
+            with lower_column:
+                lower_text = st.text_input(
+                    "Y 轴最小值", value=saved[1], placeholder="输入数值", label_visibility="collapsed"
+                )
+            with upper_label:
+                st.markdown("Y 轴最大值")
+            with upper_column:
+                upper_text = st.text_input(
+                    "Y 轴最大值", value=saved[2], placeholder="输入数值", label_visibility="collapsed"
+                )
+            with apply_column:
+                submitted = st.form_submit_button("应用自定义并绘制", type="primary", use_container_width=True)
+            if submitted:
+                saved = (custom_enabled, lower_text, upper_text)
+                y_settings[setting_key] = saved
         y_limits = validate_y_limits((saved[1], saved[2])) if saved[0] else None
         focus = not (scatter_full_range if chart_type == "散点图" else box_full_range)
         cache_key = (chart_type, parameter, focus, y_limits)
