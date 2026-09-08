@@ -95,12 +95,22 @@ st.info(
 )
 
 st.subheader("图表筛选")
-selected_parameters = st.multiselect(
-    "选择参数",
-    parameters,
-    default=parameters,
-    help="可一次选择多个参数；点击“绘制图形”后逐参数生成静态 PNG。",
-)
+if st.session_state.get("ft_parameter_selection_scope") != bundle_signature:
+    st.session_state["ft_parameter_selection_scope"] = bundle_signature
+    st.session_state["ft_selected_parameters"] = []
+st.markdown("选择参数")
+parameter_column, select_all_column = st.columns([6, 1])
+with select_all_column:
+    if st.button("全选", key="ft_select_all", use_container_width=True):
+        st.session_state["ft_selected_parameters"] = parameters.copy()
+with parameter_column:
+    selected_parameters = st.multiselect(
+        "选择参数",
+        parameters,
+        key="ft_selected_parameters",
+        label_visibility="collapsed",
+        help="可一次选择多个参数，也可点击“全选”；点击“绘制图形”后生成图表。",
+    )
 control_left, control_middle, control_right = st.columns([1.0, 1.15, 1.15])
 with control_left:
     chart_type = st.radio(
@@ -126,7 +136,7 @@ selection_signature = (
     bundle_signature,
     tuple(selected_parameters),
 )
-if st.button("绘制图形", type="primary", use_container_width=True):
+if st.button("绘制图形", key="ft_render", type="primary", use_container_width=True):
     st.session_state["ft_chart_render_signature"] = selection_signature
 
 if not selected_parameters:
@@ -168,11 +178,11 @@ for parameter in selected_parameters:
         if len(selected_parameters) > 1:
             st.markdown(f"**{parameter}**")
         with st.form(f"y_range_{widget_key}"):
-            enabled_column, lower_label, lower_column, upper_label, upper_column, apply_column = st.columns(
-                [1.5, 0.85, 1.5, 0.85, 1.5, 1.8]
+            title_column, lower_label, lower_column, upper_label, upper_column, apply_column, reset_column = st.columns(
+                [1.4, 0.85, 1.3, 0.85, 1.3, 1.8, 1.3]
             )
-            with enabled_column:
-                custom_enabled = st.checkbox("自定义 Y 轴范围", value=saved[0])
+            with title_column:
+                st.markdown("自定义 Y 轴范围")
             with lower_label:
                 st.markdown("Y 轴最小值")
             with lower_column:
@@ -187,8 +197,13 @@ for parameter in selected_parameters:
                 )
             with apply_column:
                 submitted = st.form_submit_button("应用自定义并绘制", type="primary", use_container_width=True)
+            with reset_column:
+                reset = st.form_submit_button("恢复自动范围", use_container_width=True)
             if submitted:
-                saved = (custom_enabled, lower_text, upper_text)
+                saved = (True, lower_text, upper_text)
+                y_settings[setting_key] = saved
+            elif reset:
+                saved = (False, lower_text, upper_text)
                 y_settings[setting_key] = saved
         y_limits = validate_y_limits((saved[1], saved[2])) if saved[0] else None
         focus = not (scatter_full_range if chart_type == "散点图" else box_full_range)
